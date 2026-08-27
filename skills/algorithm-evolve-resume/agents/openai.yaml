@@ -1,0 +1,4 @@
+interface:
+  display_name: "Resume Algorithm Evolve"
+  short_description: "Resume an interrupted algorithm search safely"
+  default_prompt: "Use $algorithm-evolve-resume to inspect and continue the interrupted algorithm search in this workspace."

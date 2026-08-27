@@ -160,6 +160,47 @@ class SearchStateTest(unittest.TestCase):
         finalized = self.run_cli("finalize", "--node", node)
         self.assertEqual(finalized["score"], 0.7)
 
+    def test_resume_reports_the_next_pending_step(self):
+        self.write_task("demo")
+        node = self.add("baseline", self.artifact("baseline"), "linear scan", model_calls="0")
+
+        snapshot = self.run_cli("resume")
+        self.assertEqual(snapshot["next_action"], "resume_pending_nodes")
+        self.assertEqual(snapshot["pending_nodes"][0]["resume"]["action"], "record_constraints")
+
+        self.run_cli(
+            "record",
+            "--node",
+            node,
+            "--kind",
+            "constraint",
+            "--passed",
+            "true",
+            "--evidence",
+            "tests passed",
+        )
+        snapshot = self.run_cli("resume")
+        self.assertEqual(snapshot["pending_nodes"][0]["resume"]["action"], "run_objective_evaluation")
+
+        self.run_cli(
+            "record",
+            "--node",
+            node,
+            "--kind",
+            "objective",
+            "--score",
+            "10",
+            "--evidence",
+            "benchmark.json",
+        )
+        snapshot = self.run_cli("resume")
+        self.assertEqual(snapshot["pending_nodes"][0]["resume"]["action"], "finalize_node")
+
+        self.run_cli("finalize", "--node", node)
+        snapshot = self.run_cli("resume")
+        self.assertEqual(snapshot["next_action"], "select_and_expand")
+        self.assertEqual(snapshot["best"]["id"], node)
+
 
 if __name__ == "__main__":
     unittest.main()

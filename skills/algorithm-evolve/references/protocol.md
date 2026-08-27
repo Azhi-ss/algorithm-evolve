@@ -77,6 +77,7 @@ python3 "$STATE_TOOL" --db "$DB" record \
   --evidence "$REVIEW_EVIDENCE"
 
 python3 "$STATE_TOOL" --db "$DB" finalize --node "$NODE_ID"
+python3 "$STATE_TOOL" --db "$DB" resume --task-id "$TASK_ID"
 python3 "$STATE_TOOL" --db "$DB" select --task-id "$TASK_ID"
 python3 "$STATE_TOOL" --db "$DB" status --task-id "$TASK_ID"
 python3 "$STATE_TOOL" --db "$DB" best --task-id "$TASK_ID"

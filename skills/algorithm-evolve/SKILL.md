@@ -20,8 +20,9 @@ Run a bounded Monte Carlo graph search (MCGS) over isolated candidate directorie
 
 1. Inspect the project, its runnable entrypoint, tests, benchmark, and current baseline. Discover facts from the workspace; ask the user only for decisions that cannot be inferred.
 2. Read [references/protocol.md](references/protocol.md) before creating the task. It defines the task contract, scoring rules, state commands, and subagent result format.
-3. Convert the request into `.algorithm-evolve/<task-id>/task.json`. Confirm the goal, evaluator or rubric, score direction, constraints, and budget with the user.
-4. Resolve `scripts/search_state.py` relative to this file, then initialize the database:
+3. If `.algorithm-evolve/*/state.db` already contains this task, use `algorithm-evolve-resume` instead of initializing it again.
+4. Convert the request into `.algorithm-evolve/<task-id>/task.json`. Confirm the goal, evaluator or rubric, score direction, constraints, and budget with the user.
+5. Resolve `scripts/search_state.py` relative to this file, then initialize the database:
 
 ```bash
 STATE_TOOL="/absolute/path/to/this-skill/scripts/search_state.py"
@@ -30,7 +31,7 @@ STATE_DIR=".algorithm-evolve/$TASK_ID"
 python3 "$STATE_TOOL" --db "$STATE_DIR/state.db" init --task "$STATE_DIR/task.json"
 ```
 
-5. Copy the initial artifact into a candidate directory, add it as `baseline`, record its constraint and score evidence, then finalize it. If no implementation exists, add the first generated candidate as `propose` without a parent.
+6. Copy the initial artifact into a candidate directory, add it as `baseline`, record its constraint and score evidence, then finalize it. If no implementation exists, add the first generated candidate as `propose` without a parent.
 
 ## Run The MCGS Loop
 

@@ -498,7 +498,7 @@ def select_node(conn: sqlite3.Connection, task_id: str, exploration: float) -> N
     emit({"selected": node_data(conn, selected_id), "uct": uct})
 
 
-def task_status(conn: sqlite3.Connection, task_id: str) -> None:
+def task_status_data(conn: sqlite3.Connection, task_id: str) -> dict:
     task = row(conn, "tasks", task_id)
     iterations = conn.execute(
         "SELECT COUNT(*) FROM nodes WHERE task_id = ? AND action <> 'baseline'", (task_id,)
@@ -510,18 +510,102 @@ def task_status(conn: sqlite3.Connection, task_id: str) -> None:
         "SELECT COUNT(*) FROM nodes WHERE task_id = ? AND status = 'pending'", (task_id,)
     ).fetchone()[0]
     reasons = stop_reasons(conn, task)
+    return {
+        "best_node_id": task["best_node_id"],
+        "best_score": task["best_score"],
+        "iterations": iterations,
+        "model_calls": task["model_calls"],
+        "pending": pending,
+        "rejected": rejected,
+        "stagnation": task["stagnation_count"],
+        "stop_reasons": reasons,
+        "stopped": bool(reasons),
+        "task_id": task_id,
+    }
+
+
+def task_status(conn: sqlite3.Connection, task_id: str) -> None:
+    emit(task_status_data(conn, task_id))
+
+
+def pending_resume_action(task: sqlite3.Row, node: dict) -> dict:
+    evaluations = node["evaluations"]
+    constraints = json.loads(task["constraints_json"])
+    constraint_results = [item for item in evaluations if item["kind"] == "constraint"]
+    if constraints and not constraint_results:
+        return {"action": "record_constraints"}
+    if any(item["passed"] is False for item in constraint_results):
+        return {"action": "finalize_rejection"}
+
+    if task["evaluation_mode"] in {"objective", "hybrid"}:
+        if not any(item["kind"] == "objective" for item in evaluations):
+            return {"action": "run_objective_evaluation"}
+    else:
+        judges = {item["judge"] for item in evaluations if item["kind"] == "judgment"}
+        if len(judges) < 3:
+            return {"action": "run_judgment_reviews", "reviewers_needed": 3 - len(judges)}
+    return {"action": "finalize_node"}
+
+
+def resume_search(conn: sqlite3.Connection, task_id: str | None) -> None:
+    task_ids = [item["id"] for item in conn.execute(
+        "SELECT id FROM tasks ORDER BY created_at DESC"
+    )]
+    if not task_ids:
+        raise ValueError("No Algorithm Evolve task exists in this database")
+    if task_id is None and len(task_ids) > 1:
+        emit({"requires_task_id": True, "task_ids": task_ids})
+        return
+
+    selected_task_id = task_id or task_ids[0]
+    task = row(conn, "tasks", selected_task_id)
+    status = task_status_data(conn, selected_task_id)
+    pending = []
+    for item in conn.execute(
+        "SELECT id FROM nodes WHERE task_id = ? AND status = 'pending' ORDER BY created_at",
+        (selected_task_id,),
+    ):
+        data = node_data(conn, item["id"])
+        data["artifact_exists"] = Path(data["artifact"]).is_dir()
+        data["resume"] = pending_resume_action(task, data)
+        pending.append(data)
+
+    valid_count = conn.execute(
+        "SELECT COUNT(*) FROM nodes WHERE task_id = ? AND status = 'finalized'",
+        (selected_task_id,),
+    ).fetchone()[0]
+    node_count = conn.execute(
+        "SELECT COUNT(*) FROM nodes WHERE task_id = ?", (selected_task_id,)
+    ).fetchone()[0]
+    if status["stopped"]:
+        next_action = "finish_or_request_new_budget"
+    elif pending:
+        next_action = "resume_pending_nodes"
+    elif node_count == 0:
+        next_action = "create_baseline"
+    elif valid_count == 0:
+        next_action = "repair_or_propose"
+    else:
+        next_action = "select_and_expand"
+
+    last = conn.execute(
+        "SELECT id FROM nodes WHERE task_id = ? ORDER BY created_at DESC LIMIT 1",
+        (selected_task_id,),
+    ).fetchone()
     emit(
         {
-            "best_node_id": task["best_node_id"],
-            "best_score": task["best_score"],
-            "iterations": iterations,
-            "model_calls": task["model_calls"],
-            "pending": pending,
-            "rejected": rejected,
-            "stagnation": task["stagnation_count"],
-            "stop_reasons": reasons,
-            "stopped": bool(reasons),
-            "task_id": task_id,
+            "best": None if task["best_node_id"] is None else node_data(conn, task["best_node_id"]),
+            "last_node": None if last is None else node_data(conn, last["id"]),
+            "next_action": next_action,
+            "pending_nodes": pending,
+            "status": status,
+            "task": {
+                "artifact": task["artifact"],
+                "direction": task["direction"],
+                "evaluation": json.loads(task["evaluation_json"]),
+                "goal": task["goal"],
+                "id": task["id"],
+            },
         }
     )
 
@@ -590,6 +674,9 @@ def parser() -> argparse.ArgumentParser:
     status = commands.add_parser("status")
     status.add_argument("--task-id", required=True)
 
+    resume = commands.add_parser("resume")
+    resume.add_argument("--task-id")
+
     best = commands.add_parser("best")
     best.add_argument("--task-id", required=True)
 
@@ -628,6 +715,8 @@ def main() -> int:
             select_node(conn, args.task_id, args.exploration)
         elif args.command == "status":
             task_status(conn, args.task_id)
+        elif args.command == "resume":
+            resume_search(conn, args.task_id)
         elif args.command == "best":
             best_node(conn, args.task_id)
         elif args.command == "show":
