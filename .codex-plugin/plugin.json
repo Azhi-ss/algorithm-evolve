@@ -1,0 +1,23 @@
+{
+  "name": "algorithm-evolve",
+  "version": "0.1.0",
+  "description": "Evolve and score executable algorithms with Monte Carlo graph search.",
+  "author": {
+    "name": "MLEvolve contributors"
+  },
+  "repository": "https://github.com/InternScience/MLEvolve",
+  "license": "Apache-2.0",
+  "keywords": ["algorithm", "optimization", "mcgs", "agents"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Algorithm Evolve",
+    "shortDescription": "Search and score executable algorithm variants.",
+    "longDescription": "Coordinate isolated subagents to propose, evaluate, refine, repair, and fuse algorithm candidates under an explicit budget.",
+    "developerName": "MLEvolve contributors",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "defaultPrompt": [
+      "Optimize this algorithm against its test and benchmark suite."
+    ]
+  }
+}

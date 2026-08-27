@@ -1,0 +1,4 @@
+interface:
+  display_name: "Algorithm Evolve"
+  short_description: "Search, score, and evolve executable algorithms"
+  default_prompt: "Use $algorithm-evolve to optimize this algorithm under a measurable evaluation budget."
