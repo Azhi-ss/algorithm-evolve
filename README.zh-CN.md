@@ -72,6 +72,21 @@ git -C ~/plugins/algorithm-evolve pull --ff-only
 
 如果之前是复制到 `$CODEX_HOME/skills`，拉取更新后重新执行两个 `cp -R` 命令即可。
 
+## 申请 OpenAI 官方公共目录
+
+本仓库中的 marketplace 清单是自托管的 GitHub marketplace source。它允许用户通过 CLI 安装插件，但不会自动把插件发布到 OpenAI 的官方公共插件目录。
+
+如果要申请让 ChatGPT 和 Codex 的用户发现并安装：
+
+1. 打开 [OpenAI 插件提交门户](https://platform.openai.com/plugins)。
+2. 选择 **Create plugin**，提交类型选择 **Skills only**。
+3. 选择已验证的个人或企业开发者身份。提交组织需要 **Apps Management** 写权限。
+4. 上传最终 skill bundle、列表元数据、logo、网站、支持、隐私政策和服务条款链接。
+5. 提供 starter prompts、恰好 5 个正向测试用例、3 个负向测试用例、可用地区和 release notes。
+6. 提交审核。审核通过后，才能在官方公共目录中发布。
+
+本仓库已经是 skills-only 插件结构。正式提交和发布仍需要你的 OpenAI Platform 账号、身份验证以及人工审核；没有 CLI 命令可以绕过这个流程。当前要求请参考官方的 [插件提交指南](https://developers.openai.com/plugins/deploy/submission)。
+
 ## 使用
 
 ### 开始一次搜索

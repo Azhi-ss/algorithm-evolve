@@ -72,6 +72,21 @@ git -C ~/plugins/algorithm-evolve pull --ff-only
 
 If skills were copied into `$CODEX_HOME/skills`, repeat the two `cp -R` commands after pulling.
 
+## Submit to the Official Public Directory
+
+The marketplace entry in this repository is a self-hosted GitHub marketplace source. It lets Codex users install the plugin with the CLI, but it does not automatically publish the plugin to OpenAI's universal public plugin directory.
+
+To request public listing for ChatGPT and Codex:
+
+1. Open the [OpenAI plugin submission portal](https://platform.openai.com/plugins).
+2. Select **Create plugin** and choose **Skills only**.
+3. Select a verified individual or business developer identity. The submitting organization needs **Apps Management** write access.
+4. Upload the final skill bundle, listing metadata, logo, website, support, privacy, and terms URLs.
+5. Provide starter prompts, exactly five positive test cases, three negative test cases, availability regions, and release notes.
+6. Submit the draft for review. Approval is required before you can publish it to the universal directory.
+
+This repository is already structured as a skills-only plugin. Public submission and publication still require your OpenAI Platform account, identity verification, and review approval; there is no CLI command that bypasses that process. See the official [plugin submission guide](https://developers.openai.com/plugins/deploy/submission) for current requirements.
+
 ## Usage
 
 ### Start a search
