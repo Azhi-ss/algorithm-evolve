@@ -58,7 +58,20 @@ An optional `methodology` block may be injected by an outer layer. It carries up
 
 Field names accept snake_case and camelCase aliases (`splitContract`, `groupColumn`, `oofProtocol`, `declaredEquivalent`, `featurePipeline`, `pipelineSteps`, and the same pattern for the other fields). `split_contract.kind` is `kfold`, `time`, or `group`. Group splits require `group_column`. `purge` and `embargo` must be non-negative. `oof_ensemble.members` must have at least two entries, and the ensemble must declare an `oof` protocol or set `declared_equivalent` to true. Malformed methodology fail-closes at `init`. When present, the canonical contracts are persisted and echoed by `status` and `resume`.
 
-When methodology contracts are injected, each candidate must carry a Methodology Manifest: a declarative index of the artifact (feature-pipeline steps, ensemble members, OOF protocol, and a split-reference digest summary). The candidate directory remains the source of truth; the manifest is only an index and must stay consistent with that artifact. Pass it to `add-node` as `--manifest <file>` or place `methodology.json` (or `methodology_manifest.json`) in the candidate directory. Tasks without methodology keep the previous path: a missing manifest is accepted and `show` omits the field.
+## Methodology Manifest (generator protocol)
+
+When methodology contracts are injected, the generator must emit a Methodology Manifest with **every** candidate. The four field classes are:
+
+1. **FE steps** — `feature_pipeline.steps`
+2. **ensemble members** — `oof_ensemble.members`
+3. **OOF protocol** — `oof` / `declared_equivalent` (on the ensemble or the manifest root)
+4. **split-ref digest summary** — `split_ref.digest_summary`
+
+The manifest is a **declarative index**. The candidate artifact (directory) is the **source of truth**. `finalize` rejects a mismatch (ADR 0003): the split-ref digest must equal the SHA-256 of the task-level `split_contract`, and a task-declared `oof_ensemble` requires `oof` or `declared_equivalent`.
+
+Standalone (no-contract) tasks do not require a manifest: it is optional and the methodology gates stay dormant. A missing manifest is accepted and `show` omits the field.
+
+Pass the index to `add-node` as `--manifest <file>` or place `methodology.json` (or `methodology_manifest.json`) in the candidate directory.
 
 ```json
 {
@@ -83,6 +96,29 @@ The split-reference digest summary is the lowercase SHA-256 hex digest of the ca
 - when the task declares `oof_ensemble`, the manifest must declare an `oof` protocol or `declared_equivalent`
 
 The state tool does not run `evaluation.command`. The execution subagent runs it through the host sandbox and records the result.
+
+## Component-targeted propose / refine
+
+`propose` and `refine` may target one mutable methodology component. Split is a task-level immutable reference and is **structurally excluded** from the action space (`--component split` is rejected).
+
+| `--component` | Meaning | Allowed rewrite | Frozen |
+|---|---|---|---|
+| `feature_pipeline` (`fe`, `fe-only`) | FE-only | feature-pipeline region / steps | ensemble, split-ref |
+| `oof_ensemble` (`ensemble`, `ensemble-only`) | ensemble-only | ensemble **members** only | feature-pipeline, OOF protocol / method, split-ref |
+
+Component-targeted `propose`/`refine` require a parent. `add-node` compares the child manifest against that parent and rejects a rewrite of a frozen region. Full (untargeted) `propose`/`refine` remain available when the generator changes more than one mutable component.
+
+`scripts/fake_generator.py` is a no-model scripted generator for CLI-level checks: it writes a candidate directory plus a four-field-class `methodology.json`, and its stdout matches the generator result object above. Drive it through `add-node` / `record` / `finalize` without calling a real model.
+
+Example:
+
+```bash
+python3 "$STATE_TOOL" --db "$DB" add-node \
+  --task-id "$TASK_ID" --action refine --component feature_pipeline \
+  --artifact "$CANDIDATE_DIR" \
+  --idea "FE-only: add mutual-info selection" --parent "$PARENT_ID" \
+  --manifest "$CANDIDATE_DIR/methodology.json"
+```
 
 ## Candidate Layout
 
@@ -110,7 +146,8 @@ DB="$STATE_DIR/state.db"
 python3 "$STATE_TOOL" --db "$DB" init --task "$STATE_DIR/task.json"
 
 python3 "$STATE_TOOL" --db "$DB" add-node \
-  --task-id "$TASK_ID" --action refine --artifact "$CANDIDATE_DIR" \
+  --task-id "$TASK_ID" --action refine --component feature_pipeline \
+  --artifact "$CANDIDATE_DIR" \
   --idea "Replace linear scan with indexed lookup" --parent "$PARENT_ID" \
   --manifest "$CANDIDATE_DIR/methodology.json"
 
@@ -157,7 +194,7 @@ Require generator subagents to return:
 }
 ```
 
-`manifest` is required only when the task contract includes a `methodology` block. Omit it for standalone tasks.
+`manifest` is required only when the task contract includes a `methodology` block. The generator must then include all four field classes. Omit it for standalone (no-contract) tasks; the gates stay dormant. Component-targeted `propose`/`refine` also return the same `manifest` and must rewrite only the targeted region.
 
 Require execution and reviewer subagents to return:
 
