@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     budget_model_calls INTEGER,
     target_score REAL,
     stagnation_limit INTEGER,
+    methodology_json TEXT,
     created_at TEXT NOT NULL,
     model_calls INTEGER NOT NULL DEFAULT 0,
     finalized_nodes INTEGER NOT NULL DEFAULT 0,
@@ -93,6 +94,13 @@ def connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
+def ensure_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(SCHEMA)
+    columns = {info[1] for info in conn.execute("PRAGMA table_info(tasks)")}
+    if columns and "methodology_json" not in columns:
+        conn.execute("ALTER TABLE tasks ADD COLUMN methodology_json TEXT")
+
+
 def row(conn: sqlite3.Connection, table: str, item_id: str) -> sqlite3.Row:
     if table not in {"tasks", "nodes"}:
         raise ValueError(f"Unsupported table: {table}")
@@ -108,6 +116,199 @@ def positive_int(value, name: str) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError(f"{name} must be a positive integer")
     return value
+
+
+_MISSING = object()
+SPLIT_KINDS = frozenset({"kfold", "time", "group"})
+
+
+def _copy_object(value, name: str) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must be an object")
+    return dict(value)
+
+
+def _take_aliases(data: dict, canonical: str, *aliases: str):
+    names = (canonical, *aliases)
+    present = [name for name in names if name in data]
+    if not present:
+        return _MISSING
+    first = data[present[0]]
+    for name in present[1:]:
+        if data[name] != first:
+            raise ValueError(
+                f"Conflicting aliases for {canonical}: {present[0]!r} and {name!r}"
+            )
+    for name in present:
+        del data[name]
+    return first
+
+
+def _non_empty_string(value, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return value
+
+
+def _non_negative_number(value, name: str):
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        raise ValueError(f"{name} must be a non-negative number")
+    return value
+
+
+def _named_items(items, name: str) -> list:
+    if not isinstance(items, list):
+        raise ValueError(f"{name} must be a list")
+    canonical = []
+    for index, item in enumerate(items):
+        label = f"{name}[{index}]"
+        if isinstance(item, str):
+            canonical.append(_non_empty_string(item, label))
+        elif isinstance(item, dict):
+            canonical.append(item)
+        else:
+            raise ValueError(f"{label} must be a string or object")
+    return canonical
+
+
+def validate_split_contract(raw) -> dict:
+    data = _copy_object(raw, "methodology.split_contract")
+    kind = _take_aliases(data, "kind", "type")
+    if kind not in SPLIT_KINDS:
+        raise ValueError("methodology.split_contract.kind must be kfold, time, or group")
+
+    purge = _take_aliases(data, "purge")
+    purge = 0 if purge is _MISSING or purge is None else _non_negative_number(
+        purge, "methodology.split_contract.purge"
+    )
+    embargo = _take_aliases(data, "embargo")
+    embargo = 0 if embargo is _MISSING or embargo is None else _non_negative_number(
+        embargo, "methodology.split_contract.embargo"
+    )
+
+    group_column = _take_aliases(data, "group_column", "groupColumn")
+    if kind == "group":
+        if group_column is _MISSING or group_column is None:
+            raise ValueError(
+                "methodology.split_contract.group_column is required when kind is group"
+            )
+        group_column = _non_empty_string(
+            group_column, "methodology.split_contract.group_column"
+        )
+    elif group_column is not _MISSING and group_column is not None:
+        group_column = _non_empty_string(
+            group_column, "methodology.split_contract.group_column"
+        )
+    else:
+        group_column = _MISSING
+
+    n_splits = _take_aliases(data, "n_splits", "nSplits")
+    if n_splits is not _MISSING and n_splits is not None:
+        n_splits = positive_int(n_splits, "methodology.split_contract.n_splits")
+    time_column = _take_aliases(data, "time_column", "timeColumn")
+    if time_column is not _MISSING and time_column is not None:
+        time_column = _non_empty_string(
+            time_column, "methodology.split_contract.time_column"
+        )
+
+    result = {**data, "kind": kind, "purge": purge, "embargo": embargo}
+    if group_column is not _MISSING:
+        result["group_column"] = group_column
+    if n_splits is not _MISSING and n_splits is not None:
+        result["n_splits"] = n_splits
+    if time_column is not _MISSING and time_column is not None:
+        result["time_column"] = time_column
+    return result
+
+
+def _has_oof_protocol(oof) -> bool:
+    if oof is True:
+        return True
+    if oof is False or oof is None:
+        return False
+    if isinstance(oof, dict):
+        return bool(oof)
+    raise ValueError("methodology.oof_ensemble.oof must be an object or boolean")
+
+
+def validate_oof_ensemble(raw) -> dict:
+    data = _copy_object(raw, "methodology.oof_ensemble")
+    members = _take_aliases(data, "members", "ensemble_members", "ensembleMembers")
+    if members is _MISSING or not isinstance(members, list) or len(members) < 2:
+        raise ValueError("methodology.oof_ensemble.members must contain at least 2 members")
+    members = _named_items(members, "methodology.oof_ensemble.members")
+
+    method = _take_aliases(data, "method", "ensemble_method", "ensembleMethod")
+    if method is _MISSING or method is None:
+        raise ValueError("methodology.oof_ensemble.method is required")
+    method = _non_empty_string(method, "methodology.oof_ensemble.method")
+
+    oof = _take_aliases(data, "oof", "oof_protocol", "oofProtocol")
+    declared = _take_aliases(data, "declared_equivalent", "declaredEquivalent")
+    if declared is _MISSING:
+        declared_value = False
+        declared_present = False
+    else:
+        if not isinstance(declared, bool):
+            raise ValueError(
+                "methodology.oof_ensemble.declared_equivalent must be a boolean"
+            )
+        declared_value = declared
+        declared_present = True
+
+    has_oof = False if oof is _MISSING else _has_oof_protocol(oof)
+    if not has_oof and not declared_value:
+        raise ValueError(
+            "methodology.oof_ensemble requires an oof protocol or declared_equivalent"
+        )
+
+    result = {**data, "members": members, "method": method}
+    if oof is not _MISSING:
+        result["oof"] = oof
+    if declared_present:
+        result["declared_equivalent"] = declared_value
+    return result
+
+
+def validate_feature_pipeline(raw) -> dict:
+    data = _copy_object(raw, "methodology.feature_pipeline")
+    steps = _take_aliases(data, "steps", "pipeline_steps", "pipelineSteps")
+    if steps is _MISSING:
+        raise ValueError("methodology.feature_pipeline.steps must be a list")
+    return {**data, "steps": _named_items(steps, "methodology.feature_pipeline.steps")}
+
+
+def validate_methodology(raw) -> dict | None:
+    if raw is None:
+        return None
+    data = _copy_object(raw, "methodology")
+    split = _take_aliases(data, "split_contract", "splitContract")
+    ensemble = _take_aliases(data, "oof_ensemble", "oofEnsemble")
+    pipeline = _take_aliases(data, "feature_pipeline", "featurePipeline")
+
+    result = dict(data)
+    if split is not _MISSING:
+        result["split_contract"] = validate_split_contract(split)
+    if ensemble is not _MISSING:
+        result["oof_ensemble"] = validate_oof_ensemble(ensemble)
+    if pipeline is not _MISSING:
+        result["feature_pipeline"] = validate_feature_pipeline(pipeline)
+    return result or None
+
+
+def task_methodology(task: sqlite3.Row) -> dict | None:
+    keys = set(task.keys())
+    if "methodology_json" not in keys:
+        return None
+    raw = task["methodology_json"]
+    if not raw:
+        return None
+    return json.loads(raw)
 
 
 def validate_task(data: dict) -> dict:
@@ -157,6 +358,7 @@ def validate_task(data: dict) -> dict:
     constraints = data.get("constraints", [])
     if not isinstance(constraints, list) or not all(isinstance(item, str) for item in constraints):
         raise ValueError("constraints must be a list of strings")
+    methodology = validate_methodology(data.get("methodology"))
 
     return {
         **data,
@@ -169,20 +371,23 @@ def validate_task(data: dict) -> dict:
             "stagnation": stagnation,
             "target_score": target_score,
         },
+        "methodology": methodology,
     }
 
 
 def init_task(conn: sqlite3.Connection, task_path: Path) -> None:
     data = validate_task(json.loads(task_path.read_text(encoding="utf-8")))
     budget = data["budget"]
-    conn.executescript(SCHEMA)
+    ensure_schema(conn)
+    methodology = data.get("methodology")
     conn.execute(
         """
         INSERT INTO tasks (
             id, goal, artifact, evaluation_mode, evaluation_json, direction,
             constraints_json, budget_iterations, budget_seconds,
-            budget_model_calls, target_score, stagnation_limit, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            budget_model_calls, target_score, stagnation_limit,
+            methodology_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["id"],
@@ -197,6 +402,7 @@ def init_task(conn: sqlite3.Connection, task_path: Path) -> None:
             budget["model_calls"],
             budget.get("target_score"),
             budget["stagnation"],
+            None if methodology is None else json.dumps(methodology, sort_keys=True),
             now(),
         ),
     )
@@ -510,7 +716,7 @@ def task_status_data(conn: sqlite3.Connection, task_id: str) -> dict:
         "SELECT COUNT(*) FROM nodes WHERE task_id = ? AND status = 'pending'", (task_id,)
     ).fetchone()[0]
     reasons = stop_reasons(conn, task)
-    return {
+    payload = {
         "best_node_id": task["best_node_id"],
         "best_score": task["best_score"],
         "iterations": iterations,
@@ -522,6 +728,10 @@ def task_status_data(conn: sqlite3.Connection, task_id: str) -> dict:
         "stopped": bool(reasons),
         "task_id": task_id,
     }
+    methodology = task_methodology(task)
+    if methodology is not None:
+        payload["methodology"] = methodology
+    return payload
 
 
 def task_status(conn: sqlite3.Connection, task_id: str) -> None:
@@ -592,6 +802,16 @@ def resume_search(conn: sqlite3.Connection, task_id: str | None) -> None:
         "SELECT id FROM nodes WHERE task_id = ? ORDER BY created_at DESC LIMIT 1",
         (selected_task_id,),
     ).fetchone()
+    task_payload = {
+        "artifact": task["artifact"],
+        "direction": task["direction"],
+        "evaluation": json.loads(task["evaluation_json"]),
+        "goal": task["goal"],
+        "id": task["id"],
+    }
+    methodology = task_methodology(task)
+    if methodology is not None:
+        task_payload["methodology"] = methodology
     emit(
         {
             "best": None if task["best_node_id"] is None else node_data(conn, task["best_node_id"]),
@@ -599,13 +819,7 @@ def resume_search(conn: sqlite3.Connection, task_id: str | None) -> None:
             "next_action": next_action,
             "pending_nodes": pending,
             "status": status,
-            "task": {
-                "artifact": task["artifact"],
-                "direction": task["direction"],
-                "evaluation": json.loads(task["evaluation_json"]),
-                "goal": task["goal"],
-                "id": task["id"],
-            },
+            "task": task_payload,
         }
     )
 
@@ -696,7 +910,7 @@ def main() -> int:
     try:
         conn = connect(args.db)
         if args.command != "init":
-            conn.executescript(SCHEMA)
+            ensure_schema(conn)
         if args.command == "init":
             init_task(conn, args.task)
         elif args.command == "add-node":

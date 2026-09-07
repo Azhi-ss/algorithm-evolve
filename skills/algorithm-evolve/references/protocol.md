@@ -33,6 +33,31 @@ Translate the user's natural-language request into JSON and confirm it before in
 
 Provide at least one positive `iterations`, `seconds`, or `model_calls` budget. `stagnation` and `target_score` are optional. An objective score is always better when larger for `maximize` and smaller for `minimize`.
 
+An optional `methodology` block may be injected by an outer layer. It carries up to three T44-shaped contracts. Omit the block entirely for standalone use; search behavior then stays identical to a task without methodology, and no methodology field appears in `status` or `resume` output.
+
+```json
+{
+  "methodology": {
+    "split_contract": {
+      "kind": "kfold",
+      "n_splits": 5,
+      "purge": 0,
+      "embargo": 0
+    },
+    "oof_ensemble": {
+      "members": ["baseline", "tree"],
+      "method": "mean",
+      "oof": {"protocol": "kfold"}
+    },
+    "feature_pipeline": {
+      "steps": [{"name": "impute"}, {"name": "scale"}]
+    }
+  }
+}
+```
+
+Field names accept snake_case and camelCase aliases (`splitContract`, `groupColumn`, `oofProtocol`, `declaredEquivalent`, `featurePipeline`, `pipelineSteps`, and the same pattern for the other fields). `split_contract.kind` is `kfold`, `time`, or `group`. Group splits require `group_column`. `purge` and `embargo` must be non-negative. `oof_ensemble.members` must have at least two entries, and the ensemble must declare an `oof` protocol or set `declared_equivalent` to true. Malformed methodology fail-closes at `init`. When present, the canonical contracts are persisted and echoed by `status` and `resume`.
+
 The state tool does not run `evaluation.command`. The execution subagent runs it through the host sandbox and records the result.
 
 ## Candidate Layout

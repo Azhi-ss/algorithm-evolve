@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -34,7 +35,7 @@ class SearchStateTest(unittest.TestCase):
 
     def artifact(self, name):
         path = self.root / name
-        path.mkdir()
+        path.mkdir(exist_ok=True)
         return str(path)
 
     def write_task(self, task_id, mode="objective", **budget):
@@ -200,6 +201,187 @@ class SearchStateTest(unittest.TestCase):
         snapshot = self.run_cli("resume")
         self.assertEqual(snapshot["next_action"], "select_and_expand")
         self.assertEqual(snapshot["best"]["id"], node)
+
+    def valid_methodology(self, **overrides):
+        methodology = {
+            "split_contract": {
+                "kind": "kfold",
+                "n_splits": 5,
+                "purge": 0,
+                "embargo": 1,
+            },
+            "oof_ensemble": {
+                "members": ["baseline", "tree"],
+                "method": "mean",
+                "oof": {"protocol": "kfold"},
+            },
+            "feature_pipeline": {
+                "steps": [{"name": "impute"}, {"name": "scale"}],
+            },
+        }
+        methodology.update(overrides)
+        return methodology
+
+    def write_raw_task(self, task, ok=True):
+        path = self.root / "task.json"
+        path.write_text(json.dumps(task), encoding="utf-8")
+        return self.run_cli("init", "--task", str(path), ok=ok)
+
+    def base_task(self, task_id="demo", methodology=None):
+        task = {
+            "id": task_id,
+            "goal": "Improve the example algorithm",
+            "artifact": self.artifact("source"),
+            "evaluation": {"mode": "objective", "command": "python benchmark.py"},
+            "direction": "maximize",
+            "constraints": ["tests pass"],
+            "budget": {"iterations": 10},
+        }
+        if methodology is not None:
+            task["methodology"] = methodology
+        return task
+
+    def test_status_without_methodology_omits_the_block(self):
+        self.write_task("demo")
+        status = self.run_cli("status", "--task-id", "demo")
+        self.assertNotIn("methodology", status)
+        self.assertEqual(
+            set(status),
+            {
+                "best_node_id",
+                "best_score",
+                "iterations",
+                "model_calls",
+                "pending",
+                "rejected",
+                "stagnation",
+                "stop_reasons",
+                "stopped",
+                "task_id",
+            },
+        )
+        snapshot = self.run_cli("resume")
+        self.assertNotIn("methodology", snapshot["status"])
+        self.assertNotIn("methodology", snapshot["task"])
+        self.assertEqual(
+            set(snapshot["task"]),
+            {"artifact", "direction", "evaluation", "goal", "id"},
+        )
+
+    def test_methodology_block_is_canonicalized_and_exposed(self):
+        methodology = self.valid_methodology()
+        self.write_raw_task(self.base_task(methodology=methodology))
+
+        status = self.run_cli("status", "--task-id", "demo")
+        self.assertEqual(status["methodology"], methodology)
+        snapshot = self.run_cli("resume")
+        self.assertEqual(snapshot["status"]["methodology"], methodology)
+        self.assertEqual(snapshot["task"]["methodology"], methodology)
+
+    def test_methodology_accepts_camel_case_aliases(self):
+        self.write_raw_task(
+            self.base_task(
+                methodology={
+                    "splitContract": {
+                        "kind": "group",
+                        "groupColumn": "user_id",
+                        "purge": 2,
+                        "embargo": 3,
+                    },
+                    "oofEnsemble": {
+                        "ensembleMembers": ["a", "b"],
+                        "ensembleMethod": "rank",
+                        "oofProtocol": {"protocol": "group"},
+                        "declaredEquivalent": False,
+                    },
+                    "featurePipeline": {"pipelineSteps": ["impute", {"name": "scale"}]},
+                }
+            )
+        )
+        methodology = self.run_cli("status", "--task-id", "demo")["methodology"]
+        self.assertEqual(
+            methodology["split_contract"],
+            {"kind": "group", "group_column": "user_id", "purge": 2, "embargo": 3},
+        )
+        self.assertEqual(
+            methodology["oof_ensemble"],
+            {
+                "declared_equivalent": False,
+                "members": ["a", "b"],
+                "method": "rank",
+                "oof": {"protocol": "group"},
+            },
+        )
+        self.assertEqual(
+            methodology["feature_pipeline"],
+            {"steps": ["impute", {"name": "scale"}]},
+        )
+
+    def test_declared_equivalent_allows_missing_oof_protocol(self):
+        methodology = self.valid_methodology(
+            oof_ensemble={
+                "members": ["a", "b"],
+                "method": "mean",
+                "declared_equivalent": True,
+            }
+        )
+        self.write_raw_task(self.base_task(methodology=methodology))
+        self.assertEqual(
+            self.run_cli("status", "--task-id", "demo")["methodology"]["oof_ensemble"],
+            {"declared_equivalent": True, "members": ["a", "b"], "method": "mean"},
+        )
+
+    def test_init_fail_closes_on_malformed_methodology(self):
+        cases = [
+            (
+                {"split_contract": {"kind": "random", "purge": 0, "embargo": 0}},
+                "kfold, time, or group",
+            ),
+            (
+                {"split_contract": {"kind": "kfold", "purge": -1, "embargo": 0}},
+                "non-negative number",
+            ),
+            (
+                {"split_contract": {"kind": "time", "purge": 0, "embargo": -2}},
+                "non-negative number",
+            ),
+            (
+                {"split_contract": {"kind": "group", "purge": 0, "embargo": 0}},
+                "group_column",
+            ),
+            (
+                {
+                    "oof_ensemble": {
+                        "members": ["only"],
+                        "method": "mean",
+                        "declared_equivalent": True,
+                    }
+                },
+                "at least 2 members",
+            ),
+            (
+                {"oof_ensemble": {"members": ["a", "b"], "method": "mean"}},
+                "oof protocol or declared_equivalent",
+            ),
+        ]
+        for methodology, needle in cases:
+            with self.subTest(needle=needle, methodology=methodology):
+                self.db.unlink(missing_ok=True)
+                error = self.write_raw_task(
+                    self.base_task(methodology=methodology),
+                    ok=False,
+                )
+                self.assertIn(needle, error["error"])
+
+    def test_legacy_database_without_methodology_column_stays_compatible(self):
+        self.write_task("demo")
+        conn = sqlite3.connect(self.db)
+        conn.execute("ALTER TABLE tasks DROP COLUMN methodology_json")
+        conn.commit()
+        conn.close()
+        status = self.run_cli("status", "--task-id", "demo")
+        self.assertNotIn("methodology", status)
+        self.assertEqual(status["task_id"], "demo")
 
 
 if __name__ == "__main__":

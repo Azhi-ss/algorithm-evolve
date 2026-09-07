@@ -21,7 +21,7 @@ Run a bounded Monte Carlo graph search (MCGS) over isolated candidate directorie
 1. Inspect the project, its runnable entrypoint, tests, benchmark, and current baseline. Discover facts from the workspace; ask the user only for decisions that cannot be inferred.
 2. Read [references/protocol.md](references/protocol.md) before creating the task. It defines the task contract, scoring rules, state commands, and subagent result format.
 3. If `.algorithm-evolve/*/state.db` already contains this task, use `algorithm-evolve-resume` instead of initializing it again.
-4. Convert the request into `.algorithm-evolve/<task-id>/task.json`. Confirm the goal, evaluator or rubric, score direction, constraints, and budget with the user.
+4. Convert the request into `.algorithm-evolve/<task-id>/task.json`. Confirm the goal, evaluator or rubric, score direction, constraints, and budget with the user. If an outer layer injected a `methodology` block (`split_contract`, `oof_ensemble`, `feature_pipeline`), keep it on the contract; `init` validates it fail-closed and `status`/`resume` echo the canonical form. Omit the block when none was injected.
 5. Resolve `scripts/search_state.py` relative to this file, then initialize the database:
 
 ```bash
