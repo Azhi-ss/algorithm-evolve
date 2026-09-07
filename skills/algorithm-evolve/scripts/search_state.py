@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sqlite3
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     action TEXT NOT NULL CHECK (action IN ('baseline', 'propose', 'refine', 'repair', 'fuse')),
     artifact TEXT NOT NULL,
     idea TEXT NOT NULL,
+    manifest_json TEXT,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'finalized', 'rejected')),
     effective_kind TEXT,
     effective_score REAL,
@@ -96,9 +98,12 @@ def connect(path: Path) -> sqlite3.Connection:
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
-    columns = {info[1] for info in conn.execute("PRAGMA table_info(tasks)")}
-    if columns and "methodology_json" not in columns:
+    task_columns = {info[1] for info in conn.execute("PRAGMA table_info(tasks)")}
+    if task_columns and "methodology_json" not in task_columns:
         conn.execute("ALTER TABLE tasks ADD COLUMN methodology_json TEXT")
+    node_columns = {info[1] for info in conn.execute("PRAGMA table_info(nodes)")}
+    if node_columns and "manifest_json" not in node_columns:
+        conn.execute("ALTER TABLE nodes ADD COLUMN manifest_json TEXT")
 
 
 def row(conn: sqlite3.Connection, table: str, item_id: str) -> sqlite3.Row:
@@ -311,6 +316,161 @@ def task_methodology(task: sqlite3.Row) -> dict | None:
     return json.loads(raw)
 
 
+MANIFEST_FILENAMES = ("methodology.json", "methodology_manifest.json")
+
+
+def split_contract_digest_summary(split_contract: dict) -> str:
+    canonical = json.dumps(split_contract, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def canonicalize_split_ref(raw) -> dict:
+    if isinstance(raw, str):
+        digest = _non_empty_string(raw, "manifest.split_ref")
+        return {"digest_summary": digest.lower()}
+    data = _copy_object(raw, "manifest.split_ref")
+    digest = _take_aliases(data, "digest_summary", "digestSummary", "digest", "sha256")
+    if digest is _MISSING or digest is None:
+        raise ValueError("manifest.split_ref.digest_summary must be a non-empty string")
+    digest = _non_empty_string(digest, "manifest.split_ref.digest_summary")
+    return {**data, "digest_summary": digest.lower()}
+
+
+def canonicalize_manifest_ensemble(raw) -> dict:
+    data = _copy_object(raw, "manifest.oof_ensemble")
+    members = _take_aliases(data, "members", "ensemble_members", "ensembleMembers")
+    method = _take_aliases(data, "method", "ensemble_method", "ensembleMethod")
+    oof = _take_aliases(data, "oof", "oof_protocol", "oofProtocol")
+    declared = _take_aliases(data, "declared_equivalent", "declaredEquivalent")
+    result = dict(data)
+    if members is not _MISSING:
+        result["members"] = _named_items(members, "manifest.oof_ensemble.members")
+    if method is not _MISSING and method is not None:
+        result["method"] = _non_empty_string(method, "manifest.oof_ensemble.method")
+    if oof is not _MISSING:
+        result["oof"] = oof
+    if declared is not _MISSING:
+        if not isinstance(declared, bool):
+            raise ValueError("manifest.oof_ensemble.declared_equivalent must be a boolean")
+        result["declared_equivalent"] = declared
+    return result
+
+
+def validate_methodology_manifest(raw) -> dict:
+    data = _copy_object(raw, "manifest")
+    split_ref = _take_aliases(data, "split_ref", "splitRef", "split_reference", "splitReference")
+    split_contract = _take_aliases(data, "split_contract", "splitContract")
+    ensemble = _take_aliases(data, "oof_ensemble", "oofEnsemble", "ensemble")
+    pipeline = _take_aliases(data, "feature_pipeline", "featurePipeline")
+    oof = _take_aliases(data, "oof", "oof_protocol", "oofProtocol")
+    declared = _take_aliases(data, "declared_equivalent", "declaredEquivalent")
+
+    result = dict(data)
+    if split_ref is not _MISSING:
+        result["split_ref"] = canonicalize_split_ref(split_ref)
+    if split_contract is not _MISSING:
+        result["split_contract"] = validate_split_contract(split_contract)
+    if ensemble is not _MISSING:
+        result["oof_ensemble"] = canonicalize_manifest_ensemble(ensemble)
+    if pipeline is not _MISSING:
+        result["feature_pipeline"] = validate_feature_pipeline(pipeline)
+    if oof is not _MISSING:
+        result["oof"] = oof
+    if declared is not _MISSING:
+        if not isinstance(declared, bool):
+            raise ValueError("manifest.declared_equivalent must be a boolean")
+        result["declared_equivalent"] = declared
+    return result
+
+
+def node_manifest(node) -> dict | None:
+    if isinstance(node, dict):
+        parsed = node.get("manifest")
+        if parsed is not None:
+            return parsed
+        raw = node.get("manifest_json")
+    else:
+        keys = set(node.keys())
+        if "manifest_json" not in keys:
+            return None
+        raw = node["manifest_json"]
+    if not raw:
+        return None
+    return json.loads(raw) if isinstance(raw, str) else raw
+
+
+def load_candidate_manifest(args: argparse.Namespace, artifact: Path) -> dict | None:
+    path = None
+    if getattr(args, "manifest", None) is not None:
+        path = Path(args.manifest)
+        if not path.is_file():
+            raise ValueError(f"Candidate manifest is not a file: {path}")
+    else:
+        for name in MANIFEST_FILENAMES:
+            candidate = artifact / name
+            if candidate.is_file():
+                path = candidate
+                break
+    if path is None:
+        return None
+    return validate_methodology_manifest(json.loads(path.read_text(encoding="utf-8")))
+
+
+def manifest_split_ref_digest(manifest: dict) -> str | None:
+    split_ref = manifest.get("split_ref")
+    if isinstance(split_ref, dict) and split_ref.get("digest_summary"):
+        return str(split_ref["digest_summary"]).lower()
+    if isinstance(split_ref, str) and split_ref.strip():
+        return split_ref.strip().lower()
+    split_contract = manifest.get("split_contract")
+    if isinstance(split_contract, dict):
+        return split_contract_digest_summary(split_contract)
+    return None
+
+
+def manifest_has_oof_protocol(manifest: dict) -> bool:
+    if manifest.get("declared_equivalent") is True:
+        return True
+    if "oof" in manifest:
+        try:
+            if _has_oof_protocol(manifest.get("oof")):
+                return True
+        except ValueError:
+            return False
+    ensemble = manifest.get("oof_ensemble")
+    if not isinstance(ensemble, dict):
+        return False
+    if ensemble.get("declared_equivalent") is True:
+        return True
+    if "oof" not in ensemble:
+        return False
+    try:
+        return _has_oof_protocol(ensemble.get("oof"))
+    except ValueError:
+        return False
+
+
+def methodology_finalize_failures(task: sqlite3.Row, node) -> list[str]:
+    methodology = task_methodology(task)
+    if methodology is None:
+        return []
+    manifest = node_manifest(node)
+    if manifest is None:
+        return ["candidate manifest is required when methodology contracts are injected"]
+    failures = []
+    split = methodology.get("split_contract")
+    if split is not None:
+        expected = split_contract_digest_summary(split)
+        actual = manifest_split_ref_digest(manifest)
+        if actual != expected:
+            failures.append(
+                "manifest split_ref digest summary does not match task split_contract"
+            )
+    if "oof_ensemble" in methodology and not manifest_has_oof_protocol(manifest):
+        failures.append("manifest must declare an oof protocol or declared_equivalent")
+    return failures
+
+
 def validate_task(data: dict) -> dict:
     for key in ("id", "goal", "artifact", "evaluation", "direction", "budget"):
         if key not in data:
@@ -476,10 +636,25 @@ def add_node(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
     if not artifact.is_dir():
         raise ValueError(f"Candidate artifact is not a directory: {artifact}")
 
+    manifest = load_candidate_manifest(args, artifact)
+    if task_methodology(task) is not None and manifest is None:
+        raise ValueError("Task has methodology contracts; candidate manifest is required")
+
     node_id = f"n-{uuid.uuid4().hex[:12]}"
     conn.execute(
-        "INSERT INTO nodes (id, task_id, action, artifact, idea, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (node_id, args.task_id, args.action, str(artifact), args.idea, now()),
+        """
+        INSERT INTO nodes (id, task_id, action, artifact, idea, manifest_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            node_id,
+            args.task_id,
+            args.action,
+            str(artifact),
+            args.idea,
+            None if manifest is None else json.dumps(manifest, sort_keys=True),
+            now(),
+        ),
     )
     conn.executemany(
         "INSERT INTO edges (child_id, parent_id) VALUES (?, ?)",
@@ -615,6 +790,17 @@ def finalize_node(conn: sqlite3.Connection, node_id: str) -> None:
         raise ValueError("Record hard-constraint evidence before finalizing")
 
     rejected = any(item["passed"] == 0 for item in constraint_results)
+    if not rejected:
+        methodology_failures = methodology_finalize_failures(task, node)
+        if methodology_failures:
+            conn.execute(
+                """
+                INSERT INTO evaluations (node_id, kind, score, judge, passed, evidence, created_at)
+                VALUES (?, 'constraint', NULL, NULL, 0, ?, ?)
+                """,
+                (node_id, "; ".join(methodology_failures), now()),
+            )
+            rejected = True
     if rejected:
         reward = 0.0
         conn.execute(
@@ -668,6 +854,9 @@ def finalize_node(conn: sqlite3.Connection, node_id: str) -> None:
 
 def node_data(conn: sqlite3.Connection, node_id: str) -> dict:
     node = dict(row(conn, "nodes", node_id))
+    raw_manifest = node.pop("manifest_json", None)
+    if raw_manifest:
+        node["manifest"] = json.loads(raw_manifest)
     node["parents"] = [item["parent_id"] for item in conn.execute(
         "SELECT parent_id FROM edges WHERE child_id = ? ORDER BY parent_id", (node_id,)
     )]
@@ -867,6 +1056,7 @@ def parser() -> argparse.ArgumentParser:
     add.add_argument("--artifact", required=True)
     add.add_argument("--idea", required=True)
     add.add_argument("--parent", action="append")
+    add.add_argument("--manifest", type=Path)
     add.add_argument("--model-calls", type=int, default=1)
 
     record = commands.add_parser("record")
