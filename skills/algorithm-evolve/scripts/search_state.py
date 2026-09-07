@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS nodes (
     artifact TEXT NOT NULL,
     idea TEXT NOT NULL,
     manifest_json TEXT,
+    target_component TEXT CHECK (
+        target_component IS NULL
+        OR target_component IN ('feature_pipeline', 'oof_ensemble')
+    ),
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'finalized', 'rejected')),
     effective_kind TEXT,
     effective_score REAL,
@@ -104,6 +108,8 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     node_columns = {info[1] for info in conn.execute("PRAGMA table_info(nodes)")}
     if node_columns and "manifest_json" not in node_columns:
         conn.execute("ALTER TABLE nodes ADD COLUMN manifest_json TEXT")
+    if node_columns and "target_component" not in node_columns:
+        conn.execute("ALTER TABLE nodes ADD COLUMN target_component TEXT")
 
 
 def row(conn: sqlite3.Connection, table: str, item_id: str) -> sqlite3.Row:
@@ -450,6 +456,122 @@ def manifest_has_oof_protocol(manifest: dict) -> bool:
         return False
 
 
+COMPONENT_ACTIONS = frozenset({"propose", "refine"})
+TARGET_COMPONENTS = frozenset({"feature_pipeline", "oof_ensemble"})
+COMPONENT_ALIASES = {
+    "feature_pipeline": "feature_pipeline",
+    "feature-pipeline": "feature_pipeline",
+    "featurepipeline": "feature_pipeline",
+    "fe": "feature_pipeline",
+    "fe-only": "feature_pipeline",
+    "fe_only": "feature_pipeline",
+    "oof_ensemble": "oof_ensemble",
+    "oof-ensemble": "oof_ensemble",
+    "oofensemble": "oof_ensemble",
+    "ensemble": "oof_ensemble",
+    "ensemble-only": "oof_ensemble",
+    "ensemble_only": "oof_ensemble",
+}
+SPLIT_COMPONENT_ALIASES = frozenset(
+    {
+        "split",
+        "split_contract",
+        "split-contract",
+        "splitcontract",
+        "split_ref",
+        "split-ref",
+        "splitref",
+        "split_reference",
+        "split-reference",
+        "splitreference",
+    }
+)
+
+
+def canonicalize_target_component(raw) -> str | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("component must be feature_pipeline or oof_ensemble")
+    key = raw.strip().lower().replace(" ", "_")
+    compact = key.replace("-", "_")
+    if key in SPLIT_COMPONENT_ALIASES or compact in SPLIT_COMPONENT_ALIASES:
+        raise ValueError(
+            "split is a task-level immutable reference and is excluded from the "
+            "propose/refine action space"
+        )
+    canonical = COMPONENT_ALIASES.get(key) or COMPONENT_ALIASES.get(compact)
+    if canonical not in TARGET_COMPONENTS:
+        raise ValueError("component must be feature_pipeline or oof_ensemble")
+    return canonical
+
+
+def _json_equal(left, right) -> bool:
+    return json.dumps(left, sort_keys=True, separators=(",", ":")) == json.dumps(
+        right, sort_keys=True, separators=(",", ":")
+    )
+
+
+def _region(manifest: dict | None, name: str):
+    if not manifest:
+        return None
+    if name == "split_ref":
+        return manifest_split_ref_digest(manifest)
+    return manifest.get(name)
+
+
+def _ensemble_without_members(ensemble):
+    if not isinstance(ensemble, dict):
+        return ensemble
+    return {key: value for key, value in ensemble.items() if key != "members"}
+
+
+def component_action_failures(
+    action: str,
+    component: str | None,
+    parents: list,
+    manifest: dict | None,
+) -> list[str]:
+    if component is None:
+        return []
+    if action not in COMPONENT_ACTIONS:
+        return ["component targeting is only valid for propose and refine"]
+    if not parents:
+        return ["component-targeted propose/refine requires a parent"]
+    parent_manifest = node_manifest(parents[0])
+    if parent_manifest is None or manifest is None:
+        return []
+    failures = []
+    if not _json_equal(_region(manifest, "split_ref"), _region(parent_manifest, "split_ref")):
+        failures.append(
+            "component-targeted action cannot change split_ref; split is immutable"
+        )
+    if component == "feature_pipeline":
+        if not _json_equal(
+            _region(manifest, "oof_ensemble"),
+            _region(parent_manifest, "oof_ensemble"),
+        ):
+            failures.append(
+                "feature_pipeline-only action cannot change oof_ensemble; rewrite the feature-pipeline region only"
+            )
+    else:
+        if not _json_equal(
+            _region(manifest, "feature_pipeline"),
+            _region(parent_manifest, "feature_pipeline"),
+        ):
+            failures.append(
+                "oof_ensemble-only action cannot change feature_pipeline; swap ensemble members only"
+            )
+        if not _json_equal(
+            _ensemble_without_members(manifest.get("oof_ensemble")),
+            _ensemble_without_members(parent_manifest.get("oof_ensemble")),
+        ):
+            failures.append(
+                "oof_ensemble-only action can swap members only"
+            )
+    return failures
+
+
 def methodology_finalize_failures(task: sqlite3.Row, node) -> list[str]:
     methodology = task_methodology(task)
     if methodology is None:
@@ -624,6 +746,7 @@ def add_node(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
     ).fetchone():
         raise ValueError("A task can have only one baseline")
 
+    parent_rows = []
     for parent_id in parents:
         parent = row(conn, "nodes", parent_id)
         if parent["task_id"] != args.task_id:
@@ -631,6 +754,7 @@ def add_node(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
         allowed = {"finalized", "rejected"} if args.action == "repair" else {"finalized"}
         if parent["status"] not in allowed:
             raise ValueError(f"Parent {parent_id} is not eligible for {args.action}")
+        parent_rows.append(parent)
 
     artifact = Path(args.artifact).resolve()
     if not artifact.is_dir():
@@ -640,11 +764,20 @@ def add_node(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
     if task_methodology(task) is not None and manifest is None:
         raise ValueError("Task has methodology contracts; candidate manifest is required")
 
+    component = canonicalize_target_component(getattr(args, "component", None))
+    component_failures = component_action_failures(
+        args.action, component, parent_rows, manifest
+    )
+    if component_failures:
+        raise ValueError("; ".join(component_failures))
+
     node_id = f"n-{uuid.uuid4().hex[:12]}"
     conn.execute(
         """
-        INSERT INTO nodes (id, task_id, action, artifact, idea, manifest_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO nodes (
+            id, task_id, action, artifact, idea, manifest_json, target_component, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             node_id,
@@ -653,6 +786,7 @@ def add_node(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
             str(artifact),
             args.idea,
             None if manifest is None else json.dumps(manifest, sort_keys=True),
+            component,
             now(),
         ),
     )
@@ -665,7 +799,10 @@ def add_node(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
         (args.model_calls, args.task_id),
     )
     conn.commit()
-    emit({"node_id": node_id, "parents": parents})
+    payload = {"node_id": node_id, "parents": parents}
+    if component is not None:
+        payload["target_component"] = component
+    emit(payload)
 
 
 def record_evaluation(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
@@ -857,6 +994,10 @@ def node_data(conn: sqlite3.Connection, node_id: str) -> dict:
     raw_manifest = node.pop("manifest_json", None)
     if raw_manifest:
         node["manifest"] = json.loads(raw_manifest)
+    if "target_component" in node:
+        component = node.pop("target_component")
+        if component:
+            node["target_component"] = component
     node["parents"] = [item["parent_id"] for item in conn.execute(
         "SELECT parent_id FROM edges WHERE child_id = ? ORDER BY parent_id", (node_id,)
     )]
@@ -1057,6 +1198,13 @@ def parser() -> argparse.ArgumentParser:
     add.add_argument("--idea", required=True)
     add.add_argument("--parent", action="append")
     add.add_argument("--manifest", type=Path)
+    add.add_argument(
+        "--component",
+        help=(
+            "Component-targeted propose/refine: feature_pipeline (FE-only) or "
+            "oof_ensemble (ensemble-only). Split is excluded."
+        ),
+    )
     add.add_argument("--model-calls", type=int, default=1)
 
     record = commands.add_parser("record")

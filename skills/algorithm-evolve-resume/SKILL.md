@@ -39,7 +39,7 @@ Use `--task-id` when a database contains more than one task. Treat the returned 
   - `finalize_rejection` or `finalize_node`: finalize without rerunning completed work.
 - `create_baseline`: create and evaluate the baseline using the original Skill.
 - `repair_or_propose`: inspect the last rejected node, then perform one bounded repair or create a fresh proposal.
-- `select_and_expand`: run `select`, then continue the original MCGS loop from the selected node.
+- `select_and_expand`: run `select`, then continue the original MCGS loop from the selected node. Component-targeted `propose`/`refine` (`--component feature_pipeline` or `oof_ensemble`) remain available; split stays excluded from the action space. Standalone tasks still do not require a manifest.
 - `finish_or_request_new_budget`: do not start new work. Report the best result and stop reasons; require user confirmation before creating a new budgeted task.
 
 If `artifact_exists` is false, do not evaluate that pending node. Report the missing candidate path and ask whether to reconstruct or abandon it.

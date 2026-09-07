@@ -5,10 +5,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 
 
 TOOL = Path(__file__).with_name("search_state.py")
+FAKE_GENERATOR = Path(__file__).with_name("fake_generator.py")
 
 
 class SearchStateTest(unittest.TestCase):
@@ -60,7 +62,17 @@ class SearchStateTest(unittest.TestCase):
         path.write_text(json.dumps(task), encoding="utf-8")
         self.run_cli("init", "--task", str(path))
 
-    def add(self, action, artifact, idea, *parents, model_calls="1", manifest=None, ok=True):
+    def add(
+        self,
+        action,
+        artifact,
+        idea,
+        *parents,
+        model_calls="1",
+        manifest=None,
+        component=None,
+        ok=True,
+    ):
         args = [
             "add-node",
             "--task-id",
@@ -83,10 +95,38 @@ class SearchStateTest(unittest.TestCase):
                 args.extend(("--manifest", str(path)))
             else:
                 args.extend(("--manifest", str(manifest)))
+        if component is not None:
+            args.extend(("--component", component))
         result = self.run_cli(*args, ok=ok)
         if not ok:
             return result
         return result["node_id"]
+
+    def run_fake_generator(
+        self,
+        out,
+        action="propose",
+        component=None,
+        parent_manifest=None,
+        idea=None,
+        ok=True,
+    ):
+        args = [sys.executable, str(FAKE_GENERATOR), "--out", str(out), "--action", action]
+        if component is not None:
+            args.extend(("--component", component))
+        if parent_manifest is not None:
+            path = self.root / f"{Path(out).name}-parent-manifest.json"
+            path.write_text(json.dumps(parent_manifest), encoding="utf-8")
+            args.extend(("--parent-manifest", str(path)))
+        if idea is not None:
+            args.extend(("--idea", idea))
+        result = subprocess.run(args, check=False, capture_output=True, text=True)
+        if ok and result.returncode != 0:
+            self.fail(result.stderr)
+        if not ok:
+            self.assertNotEqual(result.returncode, 0)
+            return json.loads(result.stderr)
+        return json.loads(result.stdout)
 
     def score_objective(self, node_id, score):
         self.run_cli(
@@ -618,6 +658,304 @@ class SearchStateTest(unittest.TestCase):
         shown = self.run_cli("show", "--node", node)
         self.assertNotIn("manifest", shown)
         self.assertEqual(shown["id"], node)
+
+    def test_component_split_is_structurally_excluded(self):
+        methodology = self.valid_methodology()
+        self.write_task("demo", methodology=methodology)
+        parent = self.add(
+            "baseline",
+            self.artifact("baseline"),
+            "linear scan",
+            model_calls="0",
+            manifest=self.matching_manifest(methodology),
+        )
+        self.score_objective(parent, 10)
+        for name in ("split", "split_contract", "split-ref", "split_ref"):
+            with self.subTest(component=name):
+                error = self.add(
+                    "refine",
+                    self.artifact(f"bad-{name}"),
+                    "try to change split",
+                    parent,
+                    manifest=self.matching_manifest(methodology),
+                    component=name,
+                    ok=False,
+                )
+                self.assertIn("immutable", error["error"])
+                self.assertIn("excluded", error["error"])
+
+    def test_component_rejected_on_non_propose_refine_actions(self):
+        methodology = self.valid_methodology()
+        self.write_task("demo", methodology=methodology)
+        error = self.add(
+            "baseline",
+            self.artifact("baseline"),
+            "linear scan",
+            model_calls="0",
+            manifest=self.matching_manifest(methodology),
+            component="feature_pipeline",
+            ok=False,
+        )
+        self.assertIn("only valid for propose and refine", error["error"])
+
+    def test_component_requires_a_parent(self):
+        methodology = self.valid_methodology()
+        self.write_task("demo", methodology=methodology)
+        error = self.add(
+            "propose",
+            self.artifact("orphan"),
+            "FE-only without parent",
+            manifest=self.matching_manifest(methodology),
+            component="fe-only",
+            ok=False,
+        )
+        self.assertIn("requires a parent", error["error"])
+
+    def test_fe_only_refine_rewrites_pipeline_and_freezes_ensemble(self):
+        methodology = self.valid_methodology()
+        self.write_task("demo", methodology=methodology)
+        parent_manifest = self.matching_manifest(methodology)
+        parent = self.add(
+            "baseline",
+            self.artifact("baseline"),
+            "linear scan",
+            model_calls="0",
+            manifest=parent_manifest,
+        )
+        self.score_objective(parent, 10)
+        child_manifest = deepcopy(parent_manifest)
+        child_manifest["feature_pipeline"] = {
+            "steps": [{"name": "impute"}, {"name": "scale"}, {"name": "select"}]
+        }
+        node = self.add(
+            "refine",
+            self.artifact("fe-only"),
+            "FE-only rewrite",
+            parent,
+            manifest=child_manifest,
+            component="fe",
+        )
+        added = self.run_cli("show", "--node", node)
+        self.assertEqual(added["target_component"], "feature_pipeline")
+        self.assertEqual(
+            added["manifest"]["feature_pipeline"]["steps"][-1],
+            {"name": "select"},
+        )
+        self.assertEqual(added["manifest"]["oof_ensemble"], parent_manifest["oof_ensemble"])
+        result = self.score_objective(node, 11)
+        self.assertEqual(result["status"], "finalized")
+
+    def test_unknown_component_is_rejected(self):
+        methodology = self.valid_methodology()
+        self.write_task("demo", methodology=methodology)
+        parent = self.add(
+            "baseline",
+            self.artifact("baseline"),
+            "linear scan",
+            model_calls="0",
+            manifest=self.matching_manifest(methodology),
+        )
+        self.score_objective(parent, 10)
+        error = self.add(
+            "refine",
+            self.artifact("unknown-component"),
+            "not a real component",
+            parent,
+            manifest=self.matching_manifest(methodology),
+            component="architecture",
+            ok=False,
+        )
+        self.assertIn("feature_pipeline or oof_ensemble", error["error"])
+
+    def test_fe_only_rejects_split_ref_mutation(self):
+        methodology = self.valid_methodology()
+        self.write_task("demo", methodology=methodology)
+        parent_manifest = self.matching_manifest(methodology)
+        parent = self.add(
+            "baseline",
+            self.artifact("baseline"),
+            "linear scan",
+            model_calls="0",
+            manifest=parent_manifest,
+        )
+        self.score_objective(parent, 10)
+        mutated = deepcopy(parent_manifest)
+        mutated["feature_pipeline"] = {"steps": [{"name": "impute"}, {"name": "new"}]}
+        mutated["split_ref"] = {"digest_summary": "a" * 64}
+        error = self.add(
+            "refine",
+            self.artifact("fe-mutates-split"),
+            "FE-only but changed split digest",
+            parent,
+            manifest=mutated,
+            component="feature_pipeline",
+            ok=False,
+        )
+        self.assertIn("cannot change split_ref", error["error"])
+
+    def test_fe_only_rejects_ensemble_mutation(self):
+        methodology = self.valid_methodology()
+        self.write_task("demo", methodology=methodology)
+        parent_manifest = self.matching_manifest(methodology)
+        parent = self.add(
+            "baseline",
+            self.artifact("baseline"),
+            "linear scan",
+            model_calls="0",
+            manifest=parent_manifest,
+        )
+        self.score_objective(parent, 10)
+        mutated = deepcopy(parent_manifest)
+        mutated["oof_ensemble"]["members"] = ["baseline", "swapped"]
+        error = self.add(
+            "refine",
+            self.artifact("fe-mutates-ensemble"),
+            "FE-only but swapped members",
+            parent,
+            manifest=mutated,
+            component="feature_pipeline",
+            ok=False,
+        )
+        self.assertIn("cannot change oof_ensemble", error["error"])
+
+    def test_ensemble_only_rejects_pipeline_mutation_and_non_member_ensemble_edits(self):
+        methodology = self.valid_methodology()
+        self.write_task("demo", methodology=methodology)
+        parent_manifest = self.matching_manifest(methodology)
+        parent = self.add(
+            "baseline",
+            self.artifact("baseline"),
+            "linear scan",
+            model_calls="0",
+            manifest=parent_manifest,
+        )
+        self.score_objective(parent, 10)
+        pipeline_changed = deepcopy(parent_manifest)
+        pipeline_changed["feature_pipeline"]["steps"].append({"name": "extra"})
+        error = self.add(
+            "propose",
+            self.artifact("ens-mutates-fe"),
+            "ensemble-only but rewrote FE",
+            parent,
+            manifest=pipeline_changed,
+            component="ensemble-only",
+            ok=False,
+        )
+        self.assertIn("cannot change feature_pipeline", error["error"])
+
+        method_changed = deepcopy(parent_manifest)
+        method_changed["oof_ensemble"]["method"] = "rank"
+        error = self.add(
+            "refine",
+            self.artifact("ens-mutates-method"),
+            "ensemble-only but changed method",
+            parent,
+            manifest=method_changed,
+            component="oof_ensemble",
+            ok=False,
+        )
+        self.assertIn("members only", error["error"])
+
+    def test_scripted_generator_e2e_produces_manifest_bearing_nodes(self):
+        methodology = self.valid_methodology()
+        self.write_task("demo", methodology=methodology)
+        parent_manifest = self.matching_manifest(methodology)
+
+        baseline_dir = Path(self.artifact("gen-baseline"))
+        (baseline_dir / "solution.py").write_text("# baseline\n", encoding="utf-8")
+        (baseline_dir / "methodology.json").write_text(
+            json.dumps(parent_manifest, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        baseline = self.add(
+            "baseline",
+            str(baseline_dir),
+            "scripted baseline with four-field manifest",
+            model_calls="0",
+        )
+        result = self.score_objective(baseline, 10)
+        self.assertEqual(result["status"], "finalized")
+        shown = self.run_cli("show", "--node", baseline)
+        self.assertEqual(
+            set(shown["manifest"]),
+            {"feature_pipeline", "oof_ensemble", "split_ref"},
+        )
+        self.assertIn("steps", shown["manifest"]["feature_pipeline"])
+        self.assertIn("members", shown["manifest"]["oof_ensemble"])
+        self.assertIn("oof", shown["manifest"]["oof_ensemble"])
+        self.assertIn("digest_summary", shown["manifest"]["split_ref"])
+
+        fe = self.run_fake_generator(
+            self.root / "gen-fe",
+            action="refine",
+            component="feature_pipeline",
+            parent_manifest=parent_manifest,
+        )
+        self.assertEqual(fe["component"], "feature_pipeline")
+        self.assertEqual(fe["changed_files"], ["feature_pipeline.py"])
+        self.assertNotEqual(fe["manifest"]["feature_pipeline"], parent_manifest["feature_pipeline"])
+        self.assertEqual(fe["manifest"]["oof_ensemble"], parent_manifest["oof_ensemble"])
+        fe_node = self.add(
+            "refine",
+            fe["artifact"],
+            fe["idea"],
+            baseline,
+            component="feature_pipeline",
+        )
+        fe_final = self.score_objective(fe_node, 11)
+        self.assertEqual(fe_final["status"], "finalized")
+        fe_shown = self.run_cli("show", "--node", fe_node)
+        self.assertEqual(fe_shown["target_component"], "feature_pipeline")
+        self.assertEqual(
+            fe_shown["manifest"]["split_ref"]["digest_summary"],
+            parent_manifest["split_ref"]["digest_summary"],
+        )
+
+        ens = self.run_fake_generator(
+            self.root / "gen-ens",
+            action="propose",
+            component="ensemble",
+            parent_manifest=parent_manifest,
+        )
+        self.assertEqual(ens["component"], "oof_ensemble")
+        self.assertEqual(ens["manifest"]["feature_pipeline"], parent_manifest["feature_pipeline"])
+        self.assertNotEqual(
+            ens["manifest"]["oof_ensemble"]["members"],
+            parent_manifest["oof_ensemble"]["members"],
+        )
+        ens_node = self.add(
+            "propose",
+            ens["artifact"],
+            ens["idea"],
+            baseline,
+            component="oof_ensemble",
+        )
+        ens_final = self.score_objective(ens_node, 12)
+        self.assertEqual(ens_final["status"], "finalized")
+        self.assertEqual(
+            self.run_cli("show", "--node", ens_node)["target_component"],
+            "oof_ensemble",
+        )
+        self.assertEqual(self.run_cli("best", "--task-id", "demo")["id"], ens_node)
+
+        split_error = self.run_fake_generator(
+            self.root / "gen-split",
+            action="refine",
+            component="split",
+            parent_manifest=parent_manifest,
+            ok=False,
+        )
+        self.assertIn("immutable", split_error["error"])
+
+    def test_standalone_task_still_omits_optional_manifest_and_gates_stay_dormant(self):
+        self.write_task("demo")
+        node = self.add("propose", self.artifact("standalone"), "no contract, no manifest")
+        shown = self.run_cli("show", "--node", node)
+        self.assertNotIn("manifest", shown)
+        self.assertNotIn("target_component", shown)
+        result = self.score_objective(node, 6)
+        self.assertEqual(result["status"], "finalized")
+        self.assertEqual(result["score"], 6)
 
 
 if __name__ == "__main__":
