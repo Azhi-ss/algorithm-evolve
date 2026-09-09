@@ -37,7 +37,7 @@ python3 "$STATE_TOOL" --db "$STATE_DIR/state.db" init --task "$STATE_DIR/task.js
 
 Repeat until `status` returns a stop reason:
 
-1. Run `select` to choose a finalized node by UCT.
+1. Run `select` to choose a finalized node by UCT. The product default is tree + `fixed_uct` (constant exploration √2). Progressive MCGS is opt-in only (`--selection-id progressive_mcgs_optin` or `--progressive-mcgs-optin`); environment variables cannot enable it. `#40` SelectionPolicy stays off. Elite (late top-K inverse-rank sampling) is not a promotion / Broker / Kill-test key.
 2. Run task-scoped `query` using the selected node's weakness or intended improvement. Use `--all-tasks` only when explicitly allowed.
 3. Pick one action:
    - `propose`: explore a materially different algorithm, optionally from one selected parent.

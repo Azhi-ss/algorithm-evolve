@@ -1,5 +1,7 @@
 import hashlib
 import json
+import math
+import os
 import sqlite3
 import subprocess
 import sys
@@ -7,6 +9,9 @@ import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import search_state
 
 
 TOOL = Path(__file__).with_name("search_state.py")
@@ -22,12 +27,16 @@ class SearchStateTest(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_cli(self, *args, ok=True):
+    def run_cli(self, *args, ok=True, extra_env=None):
+        env = os.environ.copy()
+        if extra_env:
+            env.update(extra_env)
         result = subprocess.run(
             [sys.executable, str(TOOL), "--db", str(self.db), *args],
             check=False,
             capture_output=True,
             text=True,
+            env=env,
         )
         if ok and result.returncode != 0:
             self.fail(result.stderr)
@@ -956,6 +965,185 @@ class SearchStateTest(unittest.TestCase):
         result = self.score_objective(node, 6)
         self.assertEqual(result["status"], "finalized")
         self.assertEqual(result["score"], 6)
+
+    def reference_fixed_uct(self, nodes, exploration, rollouts):
+        # Verbatim copy of the pre-PW-1 select_node UCT formula.
+        scored = []
+        for candidate in nodes:
+            visits = max(1, candidate["visits"])
+            uct = candidate["value_sum"] / visits + exploration * math.sqrt(
+                math.log(rollouts) / visits
+            )
+            scored.append((uct, candidate["created_at"], candidate["id"]))
+        uct, _, selected_id = max(scored, key=lambda item: (item[0], item[1]))
+        return uct, selected_id
+
+    def build_uct_vs_elite_graph(self, iterations=10):
+        """UCT prefers a fresh mid-score leaf; Elite prefers the high-score hub."""
+        self.write_task("demo", iterations=iterations)
+        baseline = self.add("baseline", self.artifact("baseline"), "linear scan", model_calls="0")
+        self.score_objective(baseline, 10)
+        star = self.add("refine", self.artifact("star"), "high metric hub", baseline)
+        self.score_objective(star, 20)
+        for index in range(6):
+            child = self.add(
+                "refine",
+                self.artifact(f"star-child-{index}"),
+                f"regressing child {index}",
+                star,
+            )
+            self.score_objective(child, 10.5)
+        bait = self.add("propose", self.artifact("bait"), "fresh mid-score leaf", baseline)
+        self.score_objective(bait, 11)
+        return {"baseline": baseline, "star": star, "bait": bait}
+
+    def test_default_select_matches_fixed_uct_reference_formula(self):
+        ids = self.build_uct_vs_elite_graph()
+        default = self.run_cli("select", "--task-id", "demo")
+        explicit = self.run_cli("select", "--task-id", "demo", "--selection-id", "fixed_uct")
+        self.assertEqual(default["selected"]["id"], ids["bait"])
+        self.assertEqual(explicit["selected"]["id"], ids["bait"])
+        self.assertEqual(set(default), {"selected", "uct"})
+        self.assertEqual(default["selected"]["id"], explicit["selected"]["id"])
+        self.assertEqual(default["uct"], explicit["uct"])
+
+        conn = search_state.connect(self.db)
+        try:
+            task = search_state.row(conn, "tasks", "demo")
+            nodes = conn.execute(
+                "SELECT * FROM nodes WHERE task_id = ? AND status = 'finalized'",
+                ("demo",),
+            ).fetchall()
+            rollouts = max(2, task["finalized_nodes"] + 1)
+            expected_uct, expected_id = self.reference_fixed_uct(
+                nodes, math.sqrt(2), rollouts
+            )
+        finally:
+            conn.close()
+        self.assertEqual(expected_id, ids["bait"])
+        self.assertEqual(default["selected"]["id"], expected_id)
+        self.assertEqual(default["uct"], expected_uct)
+        self.assertEqual(search_state.resolve_selection_id(), search_state.SELECTION_FIXED_UCT)
+        self.assertEqual(
+            search_state.resolve_selection_id(selection_id="fixed_uct"),
+            search_state.SELECTION_FIXED_UCT,
+        )
+
+    def test_progressive_t0_matches_uct_parent(self):
+        ids = self.build_uct_vs_elite_graph()
+        default = self.run_cli("select", "--task-id", "demo")
+        progressive = self.run_cli(
+            "select",
+            "--task-id",
+            "demo",
+            "--selection-id",
+            "progressive_mcgs_optin",
+            "--progressive-t",
+            "0",
+            "--progressive-horizon",
+            "10",
+            "--progressive-seed",
+            "99",
+        )
+        flag = self.run_cli(
+            "select",
+            "--task-id",
+            "demo",
+            "--progressive-mcgs-optin",
+            "--progressive-t",
+            "0",
+        )
+        self.assertEqual(default["selected"]["id"], ids["bait"])
+        self.assertEqual(progressive["selected"]["id"], ids["bait"])
+        self.assertEqual(flag["selected"]["id"], ids["bait"])
+        self.assertEqual(progressive["selection_mode"], "uct")
+        self.assertEqual(progressive["selection_id"], "progressive_mcgs_optin")
+        self.assertEqual(progressive["progressive_uct_weight"], 1.0)
+        self.assertEqual(progressive["uct"], default["uct"])
+
+    def test_progressive_after_tau_can_take_elite_topk(self):
+        ids = self.build_uct_vs_elite_graph()
+        default = self.run_cli("select", "--task-id", "demo")
+        self.assertEqual(default["selected"]["id"], ids["bait"])
+        self.assertEqual(search_state.progressive_uct_weight(0, 10), 1.0)
+        self.assertLess(search_state.progressive_uct_weight(7, 10), 1.0)
+
+        conn = search_state.connect(self.db)
+        try:
+            elite_payload = None
+            for seed in range(200):
+                payload = search_state.choose_select_parent(
+                    conn,
+                    "demo",
+                    math.sqrt(2),
+                    selection_id="progressive_mcgs_optin",
+                    progressive_t=7,
+                    progressive_horizon=10,
+                    progressive_seed=seed,
+                )
+                if (
+                    payload.get("selection_mode") == "elite"
+                    and payload["selected"]["id"] == ids["star"]
+                ):
+                    elite_payload = payload
+                    elite_seed = seed
+                    break
+            self.assertIsNotNone(
+                elite_payload,
+                "expected a seeded Elite top-K draw of the high-score hub for t≥τ",
+            )
+            self.assertEqual(elite_payload["selected"]["id"], ids["star"])
+            self.assertEqual(elite_payload["elite_rank"], 1)
+            replay = search_state.choose_select_parent(
+                conn,
+                "demo",
+                math.sqrt(2),
+                progressive_mcgs_optin=True,
+                progressive_t=7,
+                progressive_horizon=10,
+                progressive_seed=elite_seed,
+            )
+            self.assertEqual(replay["selection_mode"], "elite")
+            self.assertEqual(replay["selected"]["id"], ids["star"])
+            cli = self.run_cli(
+                "select",
+                "--task-id",
+                "demo",
+                "--selection-id",
+                "progressive_mcgs_optin",
+                "--progressive-t",
+                "7",
+                "--progressive-horizon",
+                "10",
+                "--progressive-seed",
+                str(elite_seed),
+            )
+            self.assertEqual(cli["selection_mode"], "elite")
+            self.assertEqual(cli["selected"]["id"], ids["star"])
+        finally:
+            conn.close()
+
+    def test_bait_env_vars_cannot_flip_default_to_progressive(self):
+        ids = self.build_uct_vs_elite_graph()
+        bait_env = {
+            "SELECTION_ID": "progressive_mcgs_optin",
+            "PROGRESSIVE_MCGS": "1",
+            "PROGRESSIVE_MCGS_OPTIN": "true",
+            "EVOK_SELECTION_ID": "progressive_mcgs_optin",
+            "SEARCH_SELECTION": "progressive",
+        }
+        default = self.run_cli("select", "--task-id", "demo", extra_env=bait_env)
+        self.assertEqual(default["selected"]["id"], ids["bait"])
+        self.assertEqual(set(default), {"selected", "uct"})
+        self.assertNotIn("selection_id", default)
+        self.assertNotIn("selection_mode", default)
+
+    def test_selection_id_is_a_closed_enum_not_selection_policy(self):
+        with self.assertRaises(ValueError):
+            search_state.resolve_selection_id(selection_id="SelectionPolicy")
+        with self.assertRaises(ValueError):
+            search_state.resolve_selection_id(selection_id="annealing")
+        self.assertFalse(hasattr(search_state, "SelectionPolicy"))
 
 
 if __name__ == "__main__":

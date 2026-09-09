@@ -166,6 +166,8 @@ python3 "$STATE_TOOL" --db "$DB" record \
 python3 "$STATE_TOOL" --db "$DB" finalize --node "$NODE_ID"
 python3 "$STATE_TOOL" --db "$DB" resume --task-id "$TASK_ID"
 python3 "$STATE_TOOL" --db "$DB" select --task-id "$TASK_ID"
+python3 "$STATE_TOOL" --db "$DB" select --task-id "$TASK_ID" \
+  --selection-id progressive_mcgs_optin --progressive-t 0 --progressive-seed 0
 python3 "$STATE_TOOL" --db "$DB" status --task-id "$TASK_ID"
 python3 "$STATE_TOOL" --db "$DB" best --task-id "$TASK_ID"
 python3 "$STATE_TOOL" --db "$DB" show --node "$NODE_ID"
@@ -173,6 +175,17 @@ python3 "$STATE_TOOL" --db "$DB" query --task-id "$TASK_ID" --text "indexed look
 ```
 
 Use `query --all-tasks` only after the user enables cross-task retrieval. All commands emit JSON.
+
+### Parent selection (`select`)
+
+Product default is **tree + `fixed_uct`**: constant exploration √2, same parent as today's `select_node` on the same graph. That default is **not** Progressive and is **not** `#40` SelectionPolicy (SelectionPolicy stays off / not welded open).
+
+Progressive MCGS is **explicit opt-in only**:
+
+- CLI: `--selection-id progressive_mcgs_optin` or `--progressive-mcgs-optin`
+- kwargs: `selection_id="progressive_mcgs_optin"` or `progressive_mcgs_optin=True`
+
+Environment variables cannot flip the default (bait vars such as `SELECTION_ID` / `PROGRESSIVE_MCGS` are ignored). With Progressive opted in, `t=0` matches the `fixed_uct` parent; at `t ≥ τ` (`τ` = first step with `w(t) < 1`, after `0.5 · horizon`) a seeded soft-switch may sample **Elite** top-K by inverse rank. Elite is a late-search parent-sampling mode. It is **not** a promotion gate, **not** a Broker signal, and **not** a Kill-test key. Optional `--progressive-t`, `--progressive-horizon` (defaults to the task iteration budget, else 1), and `--progressive-seed` (default 0) apply only on the opt-in path.
 
 `finalize` assigns a rollout reward of `1` for improvement over the best parent, `0.5` for equality or a parentless baseline, and `0` for regression or constraint rejection. It backpropagates once to each unique ancestor, including through fused branches. The deliberately coarse reward avoids pretending unrelated raw metric scales are comparable. Introduce task-specific normalization only when magnitude-sensitive selection is demonstrated to matter.
 

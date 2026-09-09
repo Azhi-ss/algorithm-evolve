@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import math
+import random
 import sqlite3
 import statistics
 import sys
@@ -1011,27 +1012,201 @@ def node_data(conn: sqlite3.Connection, node_id: str) -> dict:
     return node
 
 
-def select_node(conn: sqlite3.Connection, task_id: str, exploration: float) -> None:
+SELECTION_FIXED_UCT = "fixed_uct"
+SELECTION_PROGRESSIVE_MCGS_OPTIN = "progressive_mcgs_optin"
+
+# Progressive schedule constants aligned with MLEvolve / evoK SearchSelectionPort
+# (explore_switch_start=0.5, explore_switch_end=0.7, w_min=0.2, elite_topk=3).
+# τ is the first step with w(t) < 1 (progress > explore_switch_start).
+PROGRESSIVE_SWITCH_START = 0.5
+PROGRESSIVE_SWITCH_END = 0.7
+PROGRESSIVE_MIN_UCT_WEIGHT = 0.2
+PROGRESSIVE_ELITE_TOPK = 3
+
+# Product locks (PW-1 / Spec #106 / evoK #107):
+# - Default remains tree + fixed_uct (constant exploration √2). Env vars cannot flip it.
+# - #40 SelectionPolicy stays off / is not welded open; selection_id is a closed enum.
+# - Elite is a late-search parent-sampling mode (top-K inverse-rank). It is not a
+#   promotion gate, not a Broker signal, and not a Kill-test key.
+
+
+def resolve_selection_id(
+    selection_id: str | None = None,
+    progressive_mcgs_optin: bool = False,
+) -> str:
+    """Resolve the live-tree selection schedule.
+
+    Product default is ``fixed_uct``. Progressive runs only when the caller
+    explicitly passes ``selection_id='progressive_mcgs_optin'`` or
+    ``progressive_mcgs_optin=True``. Environment variables are ignored.
+    """
+    if progressive_mcgs_optin:
+        if selection_id not in (
+            None,
+            "",
+            SELECTION_FIXED_UCT,
+            SELECTION_PROGRESSIVE_MCGS_OPTIN,
+        ):
+            raise ValueError(
+                "progressive_mcgs_optin cannot be combined with "
+                f"selection_id={selection_id!r}"
+            )
+        return SELECTION_PROGRESSIVE_MCGS_OPTIN
+    if selection_id in (None, "", SELECTION_FIXED_UCT):
+        return SELECTION_FIXED_UCT
+    if selection_id == SELECTION_PROGRESSIVE_MCGS_OPTIN:
+        return SELECTION_PROGRESSIVE_MCGS_OPTIN
+    raise ValueError(
+        "selection_id must be 'fixed_uct' or 'progressive_mcgs_optin'"
+    )
+
+
+def progressive_uct_weight(t: int, horizon: int) -> float:
+    """P(UCT) = w(t): 1.0 until τ, then linear decay to w_min."""
+    if t < 0:
+        raise ValueError("progressive-t cannot be negative")
+    if horizon <= 0:
+        raise ValueError("progressive-horizon must be positive")
+    progress = t / horizon
+    if progress < PROGRESSIVE_SWITCH_START:
+        return 1.0
+    if progress < PROGRESSIVE_SWITCH_END:
+        span = PROGRESSIVE_SWITCH_END - PROGRESSIVE_SWITCH_START
+        decay = (progress - PROGRESSIVE_SWITCH_START) / span
+        return 1.0 - (1.0 - PROGRESSIVE_MIN_UCT_WEIGHT) * decay
+    return PROGRESSIVE_MIN_UCT_WEIGHT
+
+
+def progressive_rng(seed: int, t: int) -> random.Random:
+    material = f"{int(seed)}:{int(t)}".encode("utf-8")
+    mixed = int.from_bytes(hashlib.sha256(material).digest()[:8], "big")
+    return random.Random(mixed)
+
+
+def choose_fixed_uct_parent(
+    nodes: list,
+    exploration: float,
+    rollouts: int,
+) -> tuple[float, str]:
+    scored = []
+    for candidate in nodes:
+        visits = max(1, candidate["visits"])
+        uct = candidate["value_sum"] / visits + exploration * math.sqrt(
+            math.log(rollouts) / visits
+        )
+        scored.append((uct, candidate["created_at"], candidate["id"]))
+    uct, _, selected_id = max(scored, key=lambda item: (item[0], item[1]))
+    return uct, selected_id
+
+
+def _elite_sort_key(candidate, direction: str):
+    score = candidate["effective_score"]
+    if score is None:
+        ordered = float("-inf") if direction == "maximize" else float("inf")
+    else:
+        ordered = float(score) if direction == "maximize" else -float(score)
+    return (ordered, candidate["created_at"], candidate["id"])
+
+
+def choose_elite_parent(
+    nodes: list,
+    direction: str,
+    rng: random.Random,
+    k: int = PROGRESSIVE_ELITE_TOPK,
+) -> tuple[str, int]:
+    ranked = sorted(nodes, key=lambda item: _elite_sort_key(item, direction), reverse=True)
+    elite = ranked[: max(1, min(k, len(ranked)))]
+    weights = [1.0 / rank for rank in range(1, len(elite) + 1)]
+    index = rng.choices(range(len(elite)), weights=weights, k=1)[0]
+    return elite[index]["id"], index + 1
+
+
+def choose_select_parent(
+    conn: sqlite3.Connection,
+    task_id: str,
+    exploration: float,
+    *,
+    selection_id: str | None = None,
+    progressive_mcgs_optin: bool = False,
+    progressive_t: int = 0,
+    progressive_horizon: int | None = None,
+    progressive_seed: int = 0,
+) -> dict:
+    """Choose a finalized parent. Default payload is today's fixed_uct emit."""
     task = row(conn, "tasks", task_id)
     reasons = stop_reasons(conn, task)
     if reasons:
-        emit({"selected": None, "stop_reasons": reasons})
-        return
+        return {"selected": None, "stop_reasons": reasons}
     nodes = conn.execute(
         "SELECT * FROM nodes WHERE task_id = ? AND status = 'finalized'", (task_id,)
     ).fetchall()
     if not nodes:
-        emit({"selected": None, "stop_reasons": ["no_finalized_candidate"]})
-        return
+        return {"selected": None, "stop_reasons": ["no_finalized_candidate"]}
 
     rollouts = max(2, task["finalized_nodes"] + 1)
-    scored = []
-    for candidate in nodes:
-        visits = max(1, candidate["visits"])
-        uct = candidate["value_sum"] / visits + exploration * math.sqrt(math.log(rollouts) / visits)
-        scored.append((uct, candidate["created_at"], candidate["id"]))
-    uct, _, selected_id = max(scored, key=lambda item: (item[0], item[1]))
-    emit({"selected": node_data(conn, selected_id), "uct": uct})
+    uct, uct_id = choose_fixed_uct_parent(nodes, exploration, rollouts)
+    resolved = resolve_selection_id(selection_id, progressive_mcgs_optin)
+    if resolved == SELECTION_FIXED_UCT:
+        return {"selected": node_data(conn, uct_id), "uct": uct}
+
+    horizon = progressive_horizon
+    if horizon is None:
+        horizon = task["budget_iterations"] or 1
+    weight = progressive_uct_weight(progressive_t, horizon)
+    use_uct = weight >= 1.0
+    rng = None
+    if not use_uct:
+        rng = progressive_rng(progressive_seed, progressive_t)
+        use_uct = rng.random() < weight
+    if use_uct:
+        mode = "uct"
+        payload = {
+            "selected": node_data(conn, uct_id),
+            "uct": uct,
+        }
+    else:
+        mode = "elite"
+        elite_id, elite_rank = choose_elite_parent(nodes, task["direction"], rng)
+        payload = {
+            "selected": node_data(conn, elite_id),
+            "elite_rank": elite_rank,
+        }
+    payload.update(
+        {
+            "progressive_horizon": horizon,
+            "progressive_seed": progressive_seed,
+            "progressive_t": progressive_t,
+            "progressive_uct_weight": weight,
+            "selection_id": SELECTION_PROGRESSIVE_MCGS_OPTIN,
+            "selection_mode": mode,
+        }
+    )
+    return payload
+
+
+def select_node(
+    conn: sqlite3.Connection,
+    task_id: str,
+    exploration: float,
+    *,
+    selection_id: str | None = None,
+    progressive_mcgs_optin: bool = False,
+    progressive_t: int = 0,
+    progressive_horizon: int | None = None,
+    progressive_seed: int = 0,
+) -> None:
+    emit(
+        choose_select_parent(
+            conn,
+            task_id,
+            exploration,
+            selection_id=selection_id,
+            progressive_mcgs_optin=progressive_mcgs_optin,
+            progressive_t=progressive_t,
+            progressive_horizon=progressive_horizon,
+            progressive_seed=progressive_seed,
+        )
+    )
 
 
 def task_status_data(conn: sqlite3.Connection, task_id: str) -> dict:
@@ -1222,6 +1397,38 @@ def parser() -> argparse.ArgumentParser:
     select = commands.add_parser("select")
     select.add_argument("--task-id", required=True)
     select.add_argument("--exploration", type=float, default=math.sqrt(2))
+    select.add_argument(
+        "--selection-id",
+        default=SELECTION_FIXED_UCT,
+        choices=(SELECTION_FIXED_UCT, SELECTION_PROGRESSIVE_MCGS_OPTIN),
+        help=(
+            "Live-tree parent schedule. Product default is fixed_uct "
+            "(constant exploration). progressive_mcgs_optin is explicit "
+            "opt-in only; environment variables cannot enable it."
+        ),
+    )
+    select.add_argument(
+        "--progressive-mcgs-optin",
+        action="store_true",
+        help="Same as --selection-id progressive_mcgs_optin (explicit opt-in).",
+    )
+    select.add_argument(
+        "--progressive-t",
+        type=int,
+        default=0,
+        help="Progressive step t (0 = always UCT). Ignored unless Progressive is opted in.",
+    )
+    select.add_argument(
+        "--progressive-horizon",
+        type=int,
+        help="Progressive horizon T. Defaults to the task iteration budget, else 1.",
+    )
+    select.add_argument(
+        "--progressive-seed",
+        type=int,
+        default=0,
+        help="Fixed seed for Progressive soft-switch / Elite draws.",
+    )
 
     status = commands.add_parser("status")
     status.add_argument("--task-id", required=True)
@@ -1264,7 +1471,20 @@ def main() -> int:
         elif args.command == "select":
             if args.exploration < 0:
                 raise ValueError("--exploration cannot be negative")
-            select_node(conn, args.task_id, args.exploration)
+            if args.progressive_t < 0:
+                raise ValueError("--progressive-t cannot be negative")
+            if args.progressive_horizon is not None and args.progressive_horizon <= 0:
+                raise ValueError("--progressive-horizon must be positive")
+            select_node(
+                conn,
+                args.task_id,
+                args.exploration,
+                selection_id=args.selection_id,
+                progressive_mcgs_optin=args.progressive_mcgs_optin,
+                progressive_t=args.progressive_t,
+                progressive_horizon=args.progressive_horizon,
+                progressive_seed=args.progressive_seed,
+            )
         elif args.command == "status":
             task_status(conn, args.task_id)
         elif args.command == "resume":
