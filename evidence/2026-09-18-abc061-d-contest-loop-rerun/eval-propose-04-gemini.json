@@ -1,0 +1,85 @@
+{
+  "all_green": true,
+  "candidate": "/workspace/.algorithm-evolve/abc061-d-gemini-rerun/candidates/propose-04-gemini",
+  "max_score": 7.0,
+  "pass_vector": {
+    "adv_cycle_reaches_n": true,
+    "adv_int64": true,
+    "adv_side_cycle_finite": true,
+    "adv_slow_pump_inf": true,
+    "official1": true,
+    "official2": true,
+    "official3": true
+  },
+  "passed_constraints": true,
+  "passed_count": 7,
+  "required_all_green": true,
+  "results": [
+    {
+      "expect": "7",
+      "got": "7",
+      "id": "official1",
+      "kind": "official",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "inf",
+      "got": "inf",
+      "id": "official2",
+      "kind": "official",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "-5000000000",
+      "got": "-5000000000",
+      "id": "official3",
+      "kind": "official",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "5",
+      "got": "5",
+      "id": "adv_side_cycle_finite",
+      "kind": "adversarial",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "inf",
+      "got": "inf",
+      "id": "adv_cycle_reaches_n",
+      "kind": "adversarial",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "4000000000",
+      "got": "4000000000",
+      "id": "adv_int64",
+      "kind": "adversarial",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "inf",
+      "got": "inf",
+      "id": "adv_slow_pump_inf",
+      "kind": "adversarial_extra",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    }
+  ],
+  "score": 7.0,
+  "solver": "/workspace/.algorithm-evolve/abc061-d-gemini-rerun/candidates/propose-04-gemini/solve.py",
+  "submit": 0
+}

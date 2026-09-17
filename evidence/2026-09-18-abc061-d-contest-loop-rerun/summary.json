@@ -1,0 +1,80 @@
+{
+  "best": {
+    "action": "refine",
+    "artifact": "/workspace/.algorithm-evolve/abc061-d-gemini-rerun/candidates/refine-01-gemini",
+    "created_at": "2026-09-17T20:38:36.185449+00:00",
+    "effective_kind": "objective",
+    "effective_score": 7.0,
+    "evaluations": [
+      {
+        "created_at": "2026-09-17T20:38:36.327192+00:00",
+        "evidence": "/workspace/.algorithm-evolve/abc061-d-gemini-rerun/evidence/refine-01-gemini.json",
+        "id": 5,
+        "judge": null,
+        "kind": "constraint",
+        "node_id": "n-a8da5ab309b3",
+        "passed": true,
+        "score": null
+      },
+      {
+        "created_at": "2026-09-17T20:38:36.369707+00:00",
+        "evidence": "/workspace/.algorithm-evolve/abc061-d-gemini-rerun/evidence/refine-01-gemini.json",
+        "id": 6,
+        "judge": null,
+        "kind": "objective",
+        "node_id": "n-a8da5ab309b3",
+        "passed": null,
+        "score": 7.0
+      }
+    ],
+    "finalized_at": "2026-09-17T20:38:36.414000+00:00",
+    "id": "n-a8da5ab309b3",
+    "idea": "Filter the graph to vertices that are both reachable from vertex 1 and can reach vertex N, then run Bellman-Ford to detect any positive cycle that can affect the path to N.",
+    "parents": [
+      "n-afce586694ab"
+    ],
+    "reward": 1.0,
+    "status": "finalized",
+    "task_id": "abc061-d-gemini-rerun",
+    "value_sum": 4.0,
+    "visits": 8
+  },
+  "elapsed_sec": 84.89101910591125,
+  "first_all_green": {
+    "arm": "refine-01",
+    "model": "gemini-3.8-flash",
+    "node_id": "n-a8da5ab309b3",
+    "score": 7.0,
+    "step": 1
+  },
+  "forbidden_sole_long": [
+    "coding-deepseek-",
+    "deepseek-v4-"
+  ],
+  "host": "newapi.ai-modeling.top",
+  "optional_models": [
+    "gemini-3.6-flash-high",
+    "gemini-pro-agent"
+  ],
+  "primary_models": [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash-high",
+    "gemini-flash-latest"
+  ],
+  "selection": "fixed_uct_default",
+  "status": {
+    "best_node_id": "n-a8da5ab309b3",
+    "best_score": 7.0,
+    "iterations": 9,
+    "model_calls": 8,
+    "pending": 0,
+    "rejected": 0,
+    "stagnation": 7,
+    "stop_reasons": [],
+    "stopped": false,
+    "task_id": "abc061-d-gemini-rerun"
+  },
+  "submit": 0,
+  "task_id": "abc061-d-gemini-rerun",
+  "tip": "1b68978aa0206871f80a4e3f9bd12e9ef9fbfe5b"
+}

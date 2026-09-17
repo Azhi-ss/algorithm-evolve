@@ -1,0 +1,283 @@
+{
+  "clean_reeval": {
+    "all_green": true,
+    "matches_stored_best": true,
+    "pass_vector": {
+      "adv_cycle_reaches_n": true,
+      "adv_int64": true,
+      "adv_side_cycle_finite": true,
+      "adv_slow_pump_inf": true,
+      "official1": true,
+      "official2": true,
+      "official3": true
+    },
+    "score": 7.0
+  },
+  "edges": [
+    {
+      "child_id": "n-afce586694ab",
+      "parent_id": "n-3c3139c2291a"
+    },
+    {
+      "child_id": "n-a8da5ab309b3",
+      "parent_id": "n-afce586694ab"
+    },
+    {
+      "child_id": "n-444f77f82b35",
+      "parent_id": "n-a8da5ab309b3"
+    },
+    {
+      "child_id": "n-4353106fa4a1",
+      "parent_id": "n-444f77f82b35"
+    },
+    {
+      "child_id": "n-7e4331b57487",
+      "parent_id": "n-4353106fa4a1"
+    },
+    {
+      "child_id": "n-3d9a1fbe3522",
+      "parent_id": "n-7e4331b57487"
+    },
+    {
+      "child_id": "n-626241106819",
+      "parent_id": "n-3d9a1fbe3522"
+    },
+    {
+      "child_id": "n-700e6ac54adf",
+      "parent_id": "n-626241106819"
+    },
+    {
+      "child_id": "n-c459218b7168",
+      "parent_id": "n-700e6ac54adf"
+    }
+  ],
+  "parent_id_sequence": [
+    {
+      "action": "baseline",
+      "artifact": "baseline-naive-bf",
+      "idea": "Naive N-1 longest-path BF; no inf/cycle rule",
+      "node_id": "n-3c3139c2291a",
+      "parent_id": null,
+      "pass_vector": {
+        "adv_cycle_reaches_n": false,
+        "adv_int64": true,
+        "adv_side_cycle_finite": true,
+        "adv_slow_pump_inf": false,
+        "official1": true,
+        "official2": false,
+        "official3": true
+      },
+      "reward": 0.5,
+      "score": 4.0,
+      "status": "finalized"
+    },
+    {
+      "action": "propose",
+      "artifact": "control-any-pos-cycle",
+      "idea": "CONTROL: any positive cycle reachable from 1 => inf; does not check cycle can reach N",
+      "node_id": "n-afce586694ab",
+      "parent_id": "n-3c3139c2291a",
+      "pass_vector": {
+        "adv_cycle_reaches_n": true,
+        "adv_int64": true,
+        "adv_side_cycle_finite": false,
+        "adv_slow_pump_inf": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "reward": 1.0,
+      "score": 6.0,
+      "status": "finalized"
+    },
+    {
+      "action": "refine",
+      "artifact": "refine-01-gemini",
+      "checks_cycle_affects_n": true,
+      "idea": "Filter the graph to vertices that are both reachable from vertex 1 and can reach vertex N, then run Bellman-Ford to detect any positive cycle that can affect the path to N.",
+      "model": "gemini-3.8-flash",
+      "node_id": "n-a8da5ab309b3",
+      "parent_id": "n-afce586694ab",
+      "pass_vector": {
+        "adv_cycle_reaches_n": true,
+        "adv_int64": true,
+        "adv_side_cycle_finite": true,
+        "adv_slow_pump_inf": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "response_model": "gemini-3.8-flash",
+      "reward": 1.0,
+      "score": 7.0,
+      "status": "finalized",
+      "uct_parent": "n-afce586694ab"
+    },
+    {
+      "action": "refine",
+      "artifact": "refine-02-gemini",
+      "checks_cycle_affects_n": true,
+      "idea": "Filter the graph to vertices that are both reachable from vertex 1 and can reach vertex N, then use Bellman-Ford on this induced subgraph to find the maximum score or detect a positive cycle.",
+      "model": "gemini-3.7-flash-high",
+      "node_id": "n-444f77f82b35",
+      "parent_id": "n-a8da5ab309b3",
+      "pass_vector": {
+        "adv_cycle_reaches_n": true,
+        "adv_int64": true,
+        "adv_side_cycle_finite": true,
+        "adv_slow_pump_inf": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "response_model": "gemini-3.7-flash",
+      "reward": 0.5,
+      "score": 7.0,
+      "status": "finalized",
+      "uct_parent": "n-a8da5ab309b3"
+    },
+    {
+      "action": "propose",
+      "artifact": "propose-03-gemini",
+      "checks_cycle_affects_n": true,
+      "idea": "Run SPFA with negated edge weights from vertex 1, and whenever a vertex is relaxed at least N times, verify via reachability whether it can reach vertex N to declare inf.",
+      "model": "gemini-flash-latest",
+      "node_id": "n-4353106fa4a1",
+      "parent_id": "n-444f77f82b35",
+      "pass_vector": {
+        "adv_cycle_reaches_n": true,
+        "adv_int64": true,
+        "adv_side_cycle_finite": true,
+        "adv_slow_pump_inf": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "response_model": "gemini-3.8-flash",
+      "reward": 0.5,
+      "score": 7.0,
+      "status": "finalized",
+      "uct_parent": "n-444f77f82b35"
+    },
+    {
+      "action": "propose",
+      "artifact": "propose-04-gemini",
+      "checks_cycle_affects_n": true,
+      "idea": "Filter the graph to vertices that can reach vertex N via backward BFS, then run Bellman-Ford from vertex 1 for N iterations to find the maximum score or detect reachable positive cycles.",
+      "model": "gemini-3.8-flash",
+      "node_id": "n-7e4331b57487",
+      "parent_id": "n-4353106fa4a1",
+      "pass_vector": {
+        "adv_cycle_reaches_n": true,
+        "adv_int64": true,
+        "adv_side_cycle_finite": true,
+        "adv_slow_pump_inf": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "response_model": "gemini-3.8-flash",
+      "reward": 0.5,
+      "score": 7.0,
+      "status": "finalized",
+      "uct_parent": "n-4353106fa4a1"
+    },
+    {
+      "action": "propose",
+      "artifact": "propose-05-gemini",
+      "checks_cycle_affects_n": true,
+      "idea": "Run Bellman-Ford for N rounds to compute the maximum score, record the distance to vertex N, and then run an additional N rounds to check if vertex N's score continues to strictly increase due to a reachable positive cycle.",
+      "model": "gemini-3.7-flash-high",
+      "node_id": "n-3d9a1fbe3522",
+      "parent_id": "n-7e4331b57487",
+      "pass_vector": {
+        "adv_cycle_reaches_n": true,
+        "adv_int64": true,
+        "adv_side_cycle_finite": true,
+        "adv_slow_pump_inf": false,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "response_model": "gemini-3.7-flash",
+      "reward": 0.0,
+      "score": 6.0,
+      "status": "finalized",
+      "uct_parent": "n-7e4331b57487"
+    },
+    {
+      "action": "propose",
+      "artifact": "propose-06-gemini",
+      "checks_cycle_affects_n": true,
+      "idea": "Filter the graph to vertices lying on paths from 1 to N using forward and backward BFS, then run Bellman-Ford to detect any positive cycle on the remaining subgraph.",
+      "model": "gemini-flash-latest",
+      "node_id": "n-626241106819",
+      "parent_id": "n-3d9a1fbe3522",
+      "pass_vector": {
+        "adv_cycle_reaches_n": true,
+        "adv_int64": true,
+        "adv_side_cycle_finite": true,
+        "adv_slow_pump_inf": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "response_model": "gemini-3.8-flash",
+      "reward": 1.0,
+      "score": 7.0,
+      "status": "finalized",
+      "uct_parent": "n-3d9a1fbe3522"
+    },
+    {
+      "action": "refine",
+      "artifact": "refine-07-gemini",
+      "checks_cycle_affects_n": true,
+      "idea": "Filter the graph to vertices that both are reachable from vertex 1 and can reach vertex N via two BFS passes, then run Bellman-Ford on the induced subgraph to find the maximum score or detect a positive cycle.",
+      "model": "gemini-3.8-flash",
+      "node_id": "n-700e6ac54adf",
+      "parent_id": "n-626241106819",
+      "pass_vector": {
+        "adv_cycle_reaches_n": true,
+        "adv_int64": true,
+        "adv_side_cycle_finite": true,
+        "adv_slow_pump_inf": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "response_model": "gemini-3.8-flash",
+      "reward": 0.5,
+      "score": 7.0,
+      "status": "finalized",
+      "uct_parent": "n-626241106819"
+    },
+    {
+      "action": "propose",
+      "artifact": "propose-08-gemini",
+      "checks_cycle_affects_n": true,
+      "idea": "Negate all edge weights to transform the problem into finding the shortest path, then run 2N iterations of Bellman-Ford: if the distance to vertex N strictly decreases between iteration N and 2N, a negative cycle affects N (output inf); otherwise, the answer is -dist[N].",
+      "model": "gemini-3.7-flash-high",
+      "node_id": "n-c459218b7168",
+      "parent_id": "n-700e6ac54adf",
+      "pass_vector": {
+        "adv_cycle_reaches_n": true,
+        "adv_int64": true,
+        "adv_side_cycle_finite": true,
+        "adv_slow_pump_inf": false,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "response_model": "gemini-3.7-flash",
+      "reward": 0.0,
+      "score": 6.0,
+      "status": "finalized",
+      "uct_parent": "n-700e6ac54adf"
+    }
+  ],
+  "post_loop_select_keys": [
+    "selected",
+    "uct"
+  ],
+  "query_cycle_hit_count": 9
+}
