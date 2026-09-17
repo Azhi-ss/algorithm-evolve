@@ -1,0 +1,27 @@
+{
+  "company_repo_present": false,
+  "forbidden_sole_long": [
+    "coding-deepseek-*",
+    "deepseek-v4-*-ga"
+  ],
+  "gemini_ping": {
+    "content": "PONG",
+    "http": 200,
+    "model": "gemini-3.8-flash"
+  },
+  "newapi_host": "newapi.ai-modeling.top",
+  "newapi_path": "/v1",
+  "optional_models": [
+    "gemini-3.6-flash-high",
+    "gemini-pro-agent"
+  ],
+  "primary_models": [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash-high",
+    "gemini-flash-latest"
+  ],
+  "selection": "fixed_uct_default",
+  "state_dir": ".algorithm-evolve/abc061-d-gemini-rerun",
+  "submit": 0,
+  "tip": "1b68978aa0206871f80a4e3f9bd12e9ef9fbfe5b"
+}
