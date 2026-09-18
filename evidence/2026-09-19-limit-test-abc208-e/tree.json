@@ -1,0 +1,104 @@
+{
+  "nodes": [
+    {
+      "id": "n-0259ed57fd78",
+      "action": "baseline",
+      "status": "finalized",
+      "score": 0.0,
+      "reward": 0.5,
+      "idea": "BASELINE: digit DP without leading_zero; leading zeros are multiplied into the product",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/baseline-nolead",
+      "parent": null
+    },
+    {
+      "id": "n-7e5e8f802973",
+      "action": "propose",
+      "status": "finalized",
+      "score": 4.0,
+      "reward": 1.0,
+      "idea": "CONTROL: digit DP with leading_zero but discards overflow product; does not keep overflow for later zero",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/control-discard-overflow",
+      "parent": "n-0259ed57fd78"
+    },
+    {
+      "id": "n-17f05b3c1944",
+      "action": "refine",
+      "status": "finalized",
+      "score": 8.0,
+      "reward": 1.0,
+      "idea": "Use digit DP tracking (tight, lead, prod) where any product exceeding K is capped to K+1 as an overflow bucket so a later digit 0 can reset it to 0.",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/refine-01-gemini",
+      "parent": "n-7e5e8f802973"
+    },
+    {
+      "id": "n-8aef0af305cc",
+      "action": "propose",
+      "status": "finalized",
+      "score": 8.0,
+      "reward": 0.5,
+      "idea": "Compute digit products iteratively layer by layer across the digits of N using a frequency map of (tight, lead, product) states with overflow capped to K + 1.",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/propose-02-gemini",
+      "parent": "n-17f05b3c1944"
+    },
+    {
+      "id": "n-c429804cf75b",
+      "action": "propose",
+      "status": "finalized",
+      "score": 8.0,
+      "reward": 0.5,
+      "idea": "Perform digit DP over prime-factor exponent tuples (e2, e3, e5, e7) for digits 1-9 with dedicated states for zero product and overflow beyond K.",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/propose-03-gemini",
+      "parent": "n-8aef0af305cc"
+    },
+    {
+      "id": "n-7028cf230c1c",
+      "action": "propose",
+      "status": "finalized",
+      "score": 8.0,
+      "reward": 0.5,
+      "idea": "Use digit DP memoizing on the digit index and accumulated product capped at K+1, leveraging the fact that any subsequent zero digit resets the product to 0 <= K.",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/propose-04-gemini",
+      "parent": "n-c429804cf75b"
+    },
+    {
+      "id": "n-bee4db62b6c3",
+      "action": "propose",
+      "status": "finalized",
+      "score": 8.0,
+      "reward": 0.5,
+      "idea": "Perform digit DP over the digits of N with memoization on the current digit position and accumulated digit product (capped at K + 1), treating leading zeros separately and resetting the product to 0 upon encountering any non-leading zero.",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/propose-05-gemini",
+      "parent": "n-7028cf230c1c"
+    },
+    {
+      "id": "n-50a64e7c0c41",
+      "action": "propose",
+      "status": "finalized",
+      "score": 8.0,
+      "reward": 0.5,
+      "idea": "Digit DP over the decimal representation of N with memoization on (digit_index, product) where products exceeding K are collapsed into a single overflow state that can still transition to 0.",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/propose-06-gemini",
+      "parent": "n-bee4db62b6c3"
+    },
+    {
+      "id": "n-602b555d1be6",
+      "action": "propose",
+      "status": "finalized",
+      "score": 8.0,
+      "reward": 0.5,
+      "idea": "Iterative digit DP maintaining counts of digit products bounded by K plus an overflow state K+1, allowing subsequent zero digits to reset the product to zero.",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/propose-07-gemini",
+      "parent": "n-50a64e7c0c41"
+    },
+    {
+      "id": "n-65d16821086a",
+      "action": "propose",
+      "status": "finalized",
+      "score": 8.0,
+      "reward": 0.5,
+      "idea": "Perform digit DP tracking the prime-factorized digit product with an overflow state that can still transition to zero on encountering a digit 0.",
+      "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/propose-08-gemini",
+      "parent": "n-602b555d1be6"
+    }
+  ]
+}

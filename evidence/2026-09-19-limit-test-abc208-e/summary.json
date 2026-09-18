@@ -1,0 +1,85 @@
+{
+  "best": {
+    "action": "refine",
+    "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/refine-01-gemini",
+    "created_at": "2026-09-18T15:38:45.294107+00:00",
+    "effective_kind": "objective",
+    "effective_score": 8.0,
+    "evaluations": [
+      {
+        "created_at": "2026-09-18T15:38:45.533341+00:00",
+        "evidence": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/evidence/refine-01-gemini.json",
+        "id": 5,
+        "judge": null,
+        "kind": "constraint",
+        "node_id": "n-17f05b3c1944",
+        "passed": true,
+        "score": null
+      },
+      {
+        "created_at": "2026-09-18T15:38:45.574197+00:00",
+        "evidence": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/evidence/refine-01-gemini.json",
+        "id": 6,
+        "judge": null,
+        "kind": "objective",
+        "node_id": "n-17f05b3c1944",
+        "passed": null,
+        "score": 8.0
+      }
+    ],
+    "finalized_at": "2026-09-18T15:38:45.621889+00:00",
+    "id": "n-17f05b3c1944",
+    "idea": "Use digit DP tracking (tight, lead, prod) where any product exceeding K is capped to K+1 as an overflow bucket so a later digit 0 can reset it to 0.",
+    "parents": [
+      "n-7e5e8f802973"
+    ],
+    "reward": 1.0,
+    "status": "finalized",
+    "task_id": "abc208-e-limit-fixed",
+    "value_sum": 4.5,
+    "visits": 8
+  },
+  "elapsed_sec": 114.47891235351562,
+  "first_all_green": {
+    "arm": "refine-01",
+    "model": "gemini-3.8-flash",
+    "node_id": "n-17f05b3c1944",
+    "score": 8.0,
+    "step": 1
+  },
+  "forbidden_sole_long": [
+    "coding-deepseek-",
+    "deepseek-v4-",
+    "gpt-",
+    "chatgpt",
+    "o1-",
+    "o3-",
+    "o4-"
+  ],
+  "host": "newapi.ai-modeling.top",
+  "optional_models": [
+    "gemini-3.6-flash-high",
+    "gemini-pro-agent"
+  ],
+  "primary_models": [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash-high",
+    "gemini-flash-latest"
+  ],
+  "selection": "fixed_uct_default",
+  "status": {
+    "best_node_id": "n-17f05b3c1944",
+    "best_score": 8.0,
+    "iterations": 9,
+    "model_calls": 8,
+    "pending": 0,
+    "rejected": 0,
+    "stagnation": 7,
+    "stop_reasons": [],
+    "stopped": false,
+    "task_id": "abc208-e-limit-fixed"
+  },
+  "submit": 0,
+  "task_id": "abc208-e-limit-fixed",
+  "tip": "b786bab33dce045b7269f1da98374d36d6c83171"
+}

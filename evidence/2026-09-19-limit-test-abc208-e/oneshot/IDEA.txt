@@ -1,0 +1,1 @@
+Digit DP where digit products exceeding K are clamped to K+1 (overflow) because a subsequent digit 0 can still reset the product to 0 <= K, and leading zeros are handled with a started flag.

@@ -1,0 +1,322 @@
+{
+  "case_order": [
+    "official1",
+    "official2",
+    "official3",
+    "adv_multizero_1010",
+    "adv_overflow_then_zero",
+    "adv_n1_positive",
+    "hold_overflow_590",
+    "hold_n10"
+  ],
+  "nodes": [
+    {
+      "label": "baseline",
+      "node_id": "n-0259ed57fd78",
+      "score": 0.0,
+      "all_green": false,
+      "pass_vector": {
+        "adv_multizero_1010": false,
+        "adv_n1_positive": false,
+        "adv_overflow_then_zero": false,
+        "hold_n10": false,
+        "hold_overflow_590": false,
+        "official1": false,
+        "official2": false,
+        "official3": false
+      },
+      "official": {
+        "official1": false,
+        "official2": false,
+        "official3": false
+      },
+      "adversarial": {
+        "adv_multizero_1010": false,
+        "adv_overflow_then_zero": false,
+        "adv_n1_positive": false,
+        "hold_overflow_590": false,
+        "hold_n10": false
+      }
+    },
+    {
+      "label": "control",
+      "node_id": "n-7e5e8f802973",
+      "score": 4.0,
+      "all_green": false,
+      "pass_vector": {
+        "adv_multizero_1010": false,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": false,
+        "hold_n10": true,
+        "hold_overflow_590": false,
+        "official1": true,
+        "official2": true,
+        "official3": false
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": false
+      },
+      "adversarial": {
+        "adv_multizero_1010": false,
+        "adv_overflow_then_zero": false,
+        "adv_n1_positive": true,
+        "hold_overflow_590": false,
+        "hold_n10": true
+      }
+    },
+    {
+      "label": "refine-01",
+      "node_id": "n-17f05b3c1944",
+      "score": 8.0,
+      "all_green": true,
+      "pass_vector": {
+        "adv_multizero_1010": true,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": true,
+        "hold_n10": true,
+        "hold_overflow_590": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "adversarial": {
+        "adv_multizero_1010": true,
+        "adv_overflow_then_zero": true,
+        "adv_n1_positive": true,
+        "hold_overflow_590": true,
+        "hold_n10": true
+      }
+    },
+    {
+      "label": "propose-02",
+      "node_id": "n-8aef0af305cc",
+      "score": 8.0,
+      "all_green": true,
+      "pass_vector": {
+        "adv_multizero_1010": true,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": true,
+        "hold_n10": true,
+        "hold_overflow_590": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "adversarial": {
+        "adv_multizero_1010": true,
+        "adv_overflow_then_zero": true,
+        "adv_n1_positive": true,
+        "hold_overflow_590": true,
+        "hold_n10": true
+      }
+    },
+    {
+      "label": "propose-03",
+      "node_id": "n-c429804cf75b",
+      "score": 8.0,
+      "all_green": true,
+      "pass_vector": {
+        "adv_multizero_1010": true,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": true,
+        "hold_n10": true,
+        "hold_overflow_590": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "adversarial": {
+        "adv_multizero_1010": true,
+        "adv_overflow_then_zero": true,
+        "adv_n1_positive": true,
+        "hold_overflow_590": true,
+        "hold_n10": true
+      }
+    },
+    {
+      "label": "propose-04",
+      "node_id": "n-7028cf230c1c",
+      "score": 8.0,
+      "all_green": true,
+      "pass_vector": {
+        "adv_multizero_1010": true,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": true,
+        "hold_n10": true,
+        "hold_overflow_590": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "adversarial": {
+        "adv_multizero_1010": true,
+        "adv_overflow_then_zero": true,
+        "adv_n1_positive": true,
+        "hold_overflow_590": true,
+        "hold_n10": true
+      }
+    },
+    {
+      "label": "propose-05",
+      "node_id": "n-bee4db62b6c3",
+      "score": 8.0,
+      "all_green": true,
+      "pass_vector": {
+        "adv_multizero_1010": true,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": true,
+        "hold_n10": true,
+        "hold_overflow_590": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "adversarial": {
+        "adv_multizero_1010": true,
+        "adv_overflow_then_zero": true,
+        "adv_n1_positive": true,
+        "hold_overflow_590": true,
+        "hold_n10": true
+      }
+    },
+    {
+      "label": "propose-06",
+      "node_id": "n-50a64e7c0c41",
+      "score": 8.0,
+      "all_green": true,
+      "pass_vector": {
+        "adv_multizero_1010": true,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": true,
+        "hold_n10": true,
+        "hold_overflow_590": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "adversarial": {
+        "adv_multizero_1010": true,
+        "adv_overflow_then_zero": true,
+        "adv_n1_positive": true,
+        "hold_overflow_590": true,
+        "hold_n10": true
+      }
+    },
+    {
+      "label": "propose-07",
+      "node_id": "n-602b555d1be6",
+      "score": 8.0,
+      "all_green": true,
+      "pass_vector": {
+        "adv_multizero_1010": true,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": true,
+        "hold_n10": true,
+        "hold_overflow_590": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "adversarial": {
+        "adv_multizero_1010": true,
+        "adv_overflow_then_zero": true,
+        "adv_n1_positive": true,
+        "hold_overflow_590": true,
+        "hold_n10": true
+      }
+    },
+    {
+      "label": "propose-08",
+      "node_id": "n-65d16821086a",
+      "score": 8.0,
+      "all_green": true,
+      "pass_vector": {
+        "adv_multizero_1010": true,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": true,
+        "hold_n10": true,
+        "hold_overflow_590": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "adversarial": {
+        "adv_multizero_1010": true,
+        "adv_overflow_then_zero": true,
+        "adv_n1_positive": true,
+        "hold_overflow_590": true,
+        "hold_n10": true
+      }
+    },
+    {
+      "label": "winner-clean",
+      "node_id": null,
+      "score": 8.0,
+      "all_green": true,
+      "pass_vector": {
+        "adv_multizero_1010": true,
+        "adv_n1_positive": true,
+        "adv_overflow_then_zero": true,
+        "hold_n10": true,
+        "hold_overflow_590": true,
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "official": {
+        "official1": true,
+        "official2": true,
+        "official3": true
+      },
+      "adversarial": {
+        "adv_multizero_1010": true,
+        "adv_overflow_then_zero": true,
+        "adv_n1_positive": true,
+        "hold_overflow_590": true,
+        "hold_n10": true
+      }
+    }
+  ]
+}

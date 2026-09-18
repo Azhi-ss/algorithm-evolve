@@ -1,0 +1,97 @@
+{
+  "adversarial_all_green": true,
+  "all_green": true,
+  "candidate": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/propose-04-gemini",
+  "max_score": 8.0,
+  "official_all_green": true,
+  "pass_vector": {
+    "adv_multizero_1010": true,
+    "adv_n1_positive": true,
+    "adv_overflow_then_zero": true,
+    "hold_n10": true,
+    "hold_overflow_590": true,
+    "official1": true,
+    "official2": true,
+    "official3": true
+  },
+  "passed_constraints": true,
+  "passed_count": 8,
+  "required_all_green": true,
+  "results": [
+    {
+      "expect": "5",
+      "got": "5",
+      "id": "official1",
+      "kind": "official",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "99",
+      "got": "99",
+      "id": "official2",
+      "kind": "official",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "841103275147365677",
+      "got": "841103275147365677",
+      "id": "official3",
+      "kind": "official",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "194",
+      "got": "194",
+      "id": "adv_multizero_1010",
+      "kind": "adversarial",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "75",
+      "got": "75",
+      "id": "adv_overflow_then_zero",
+      "kind": "adversarial",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "1",
+      "got": "1",
+      "id": "adv_n1_positive",
+      "kind": "adversarial",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "129",
+      "got": "129",
+      "id": "hold_overflow_590",
+      "kind": "adversarial_extra",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "2",
+      "got": "2",
+      "id": "hold_n10",
+      "kind": "adversarial_extra",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    }
+  ],
+  "score": 8.0,
+  "solver": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/propose-04-gemini/solve.py",
+  "submit": 0
+}

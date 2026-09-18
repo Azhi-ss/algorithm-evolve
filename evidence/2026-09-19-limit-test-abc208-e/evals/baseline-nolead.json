@@ -1,0 +1,97 @@
+{
+  "adversarial_all_green": false,
+  "all_green": false,
+  "candidate": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/baseline-nolead",
+  "max_score": 8.0,
+  "official_all_green": false,
+  "pass_vector": {
+    "adv_multizero_1010": false,
+    "adv_n1_positive": false,
+    "adv_overflow_then_zero": false,
+    "hold_n10": false,
+    "hold_overflow_590": false,
+    "official1": false,
+    "official2": false,
+    "official3": false
+  },
+  "passed_constraints": true,
+  "passed_count": 0,
+  "required_all_green": false,
+  "results": [
+    {
+      "expect": "5",
+      "got": "13",
+      "id": "official1",
+      "kind": "official",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "99",
+      "got": "101",
+      "id": "official2",
+      "kind": "official",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "841103275147365677",
+      "got": "1000000000000000001",
+      "id": "official3",
+      "kind": "official",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "194",
+      "got": "1011",
+      "id": "adv_multizero_1010",
+      "kind": "adversarial",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "75",
+      "got": "151",
+      "id": "adv_overflow_then_zero",
+      "kind": "adversarial",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "1",
+      "got": "2",
+      "id": "adv_n1_positive",
+      "kind": "adversarial",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "129",
+      "got": "208",
+      "id": "hold_overflow_590",
+      "kind": "adversarial_extra",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "2",
+      "got": "11",
+      "id": "hold_n10",
+      "kind": "adversarial_extra",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    }
+  ],
+  "score": 0.0,
+  "solver": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/baseline-nolead/solve.py",
+  "submit": 0
+}
