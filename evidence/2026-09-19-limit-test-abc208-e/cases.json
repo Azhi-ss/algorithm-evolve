@@ -1,0 +1,65 @@
+{
+  "problem": "abc208_e",
+  "submit": 0,
+  "token_rule": "last non-empty stdout line must be exactly a decimal integer",
+  "timeout_sec": 3.0,
+  "expect_source": "official samples as published; adversarial expects from brute (N<=1010) crossed with reference digit-DP (leading_zero + overflow-bucket K+1). official3 matches published 841103275147365677.",
+  "cases": [
+    {
+      "id": "official1",
+      "kind": "official",
+      "expect": "5",
+      "hand_score": "1,2,10,11,12",
+      "input": "13 2\n"
+    },
+    {
+      "id": "official2",
+      "kind": "official",
+      "expect": "99",
+      "hand_score": "only 99 fails (9*9=81>80)",
+      "input": "100 80\n"
+    },
+    {
+      "id": "official3",
+      "kind": "official",
+      "expect": "841103275147365677",
+      "hand_score": "64-bit scale; published sample 3",
+      "input": "1000000000000000000 1000000000\n"
+    },
+    {
+      "id": "adv_multizero_1010",
+      "kind": "adversarial",
+      "expect": "194",
+      "hand_score": "N=1010 K=1; brute=DP=194. Hits leading_zero + multi-zero tight bound. nolead\u21921011; discard\u219226",
+      "input": "1010 1\n"
+    },
+    {
+      "id": "adv_overflow_then_zero",
+      "kind": "adversarial",
+      "expect": "75",
+      "hand_score": "N=290 K=5; 2*9=18>5 then *0=0<=5 must count. brute=DP=75; discard\u219260",
+      "input": "290 5\n"
+    },
+    {
+      "id": "adv_n1_positive",
+      "kind": "adversarial",
+      "expect": "1",
+      "hand_score": "only x=1; product 1<=1. Falsifies counting x=0 (would print 2)",
+      "input": "1 1\n"
+    },
+    {
+      "id": "hold_overflow_590",
+      "kind": "adversarial_extra",
+      "expect": "129",
+      "hand_score": "holdout overflow-then-0; N=590 K=4; brute=DP=129; discard\u219277",
+      "input": "590 4\n"
+    },
+    {
+      "id": "hold_n10",
+      "kind": "adversarial_extra",
+      "expect": "2",
+      "hand_score": "holdout small; 1 and 10. Falsifies count-x=0 (3) and nolead (11)",
+      "input": "10 1\n"
+    }
+  ]
+}

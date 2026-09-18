@@ -1,0 +1,30 @@
+{
+  "forbidden_sole_long": [
+    "coding-deepseek-*",
+    "deepseek-v4-*-ga",
+    "GPT*"
+  ],
+  "gemini_ping": {
+    "content": "PONG",
+    "http": 200,
+    "model": "gemini-3.8-flash"
+  },
+  "host": "newapi.ai-modeling.top",
+  "loop_run": false,
+  "models_count": 34,
+  "models_http": 200,
+  "newapi_path": "/v1",
+  "optional_models": [
+    "gemini-3.6-flash-high",
+    "gemini-pro-agent"
+  ],
+  "primary_models": [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash-high",
+    "gemini-flash-latest"
+  ],
+  "selection": "fixed_uct_default",
+  "state_dir": ".algorithm-evolve/abc208-e-limit-fixed",
+  "submit": 0,
+  "tip": "1b68978aa0206871f80a4e3f9bd12e9ef9fbfe5b"
+}
