@@ -1,0 +1,8 @@
+{
+  "step": 1,
+  "arm": "refine-01",
+  "node_id": "n-17f05b3c1944",
+  "model": "gemini-3.8-flash",
+  "score": 8.0,
+  "clean_reeval_matches": true
+}

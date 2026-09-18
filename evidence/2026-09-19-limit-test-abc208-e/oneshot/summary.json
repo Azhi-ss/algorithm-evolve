@@ -1,0 +1,29 @@
+{
+  "all_green": true,
+  "arm": "B_oneshot",
+  "fails_adversarial_official_would_miss": [],
+  "host": "newapi.ai-modeling.top",
+  "idea": "Digit DP where digit products exceeding K are clamped to K+1 (overflow) because a subsequent digit 0 can still reset the product to 0 <= K, and leading zeros are handled with a started flag.",
+  "keeps_overflow_for_later_zero": true,
+  "leading_zero_flag": true,
+  "max_score": 8.0,
+  "missed_hidden_while_official_green": false,
+  "official_all_green": true,
+  "ok": true,
+  "pass_vector": {
+    "adv_multizero_1010": true,
+    "adv_n1_positive": true,
+    "adv_overflow_then_zero": true,
+    "hold_n10": true,
+    "hold_overflow_590": true,
+    "official1": true,
+    "official2": true,
+    "official3": true
+  },
+  "requested_model": "gemini-3.8-flash",
+  "response_model": "gemini-3.8-flash",
+  "score": 8.0,
+  "submit": 0,
+  "ts": "2026-09-18T15:38:21.211443+00:00",
+  "yellows": []
+}

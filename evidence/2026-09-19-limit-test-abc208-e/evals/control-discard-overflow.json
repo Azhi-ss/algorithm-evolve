@@ -1,0 +1,97 @@
+{
+  "adversarial_all_green": false,
+  "all_green": false,
+  "candidate": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/control-discard-overflow",
+  "max_score": 8.0,
+  "official_all_green": false,
+  "pass_vector": {
+    "adv_multizero_1010": false,
+    "adv_n1_positive": true,
+    "adv_overflow_then_zero": false,
+    "hold_n10": true,
+    "hold_overflow_590": false,
+    "official1": true,
+    "official2": true,
+    "official3": false
+  },
+  "passed_constraints": true,
+  "passed_count": 4,
+  "required_all_green": false,
+  "results": [
+    {
+      "expect": "5",
+      "got": "5",
+      "id": "official1",
+      "kind": "official",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "99",
+      "got": "99",
+      "id": "official2",
+      "kind": "official",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "841103275147365677",
+      "got": "779710487084330517",
+      "id": "official3",
+      "kind": "official",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "194",
+      "got": "26",
+      "id": "adv_multizero_1010",
+      "kind": "adversarial",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "75",
+      "got": "60",
+      "id": "adv_overflow_then_zero",
+      "kind": "adversarial",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "1",
+      "got": "1",
+      "id": "adv_n1_positive",
+      "kind": "adversarial",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    },
+    {
+      "expect": "129",
+      "got": "77",
+      "id": "hold_overflow_590",
+      "kind": "adversarial_extra",
+      "ok": false,
+      "status": "WA",
+      "stderr": ""
+    },
+    {
+      "expect": "2",
+      "got": "2",
+      "id": "hold_n10",
+      "kind": "adversarial_extra",
+      "ok": true,
+      "status": "pass",
+      "stderr": ""
+    }
+  ],
+  "score": 4.0,
+  "solver": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/candidates/control-discard-overflow/solve.py",
+  "submit": 0
+}

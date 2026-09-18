@@ -1,0 +1,22 @@
+{
+  "id": "abc208-e-limit-fixed",
+  "goal": "Count positive integers x<=N whose digit-product is <=K. Local evaluator only. submit=0. Selection is product-default fixed_uct. Gemini-led propose rotate.",
+  "artifact": "/workspace/.algorithm-evolve/abc208-e-limit-fixed/seed",
+  "evaluation": {
+    "mode": "objective",
+    "command": "python3 /workspace/.algorithm-evolve/abc208-e-limit-fixed/evaluator/evaluate.py --candidate ."
+  },
+  "direction": "maximize",
+  "constraints": [
+    "solve.py exists and is independently runnable",
+    "each fixture yields a single integer token, with no crash or timeout",
+    "no AtCoder network submit (submit=0)",
+    "official samples plus required adversarial fixtures are all scored"
+  ],
+  "budget": {
+    "iterations": 12,
+    "seconds": 3600,
+    "model_calls": 24,
+    "stagnation": 12
+  }
+}
